@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -10,6 +11,7 @@ type KanbanColumnProps = {
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
+  onUpdateCard: (cardId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
 
@@ -18,9 +20,15 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
+  onUpdateCard,
   onDeleteCard,
 }: KanbanColumnProps) => {
+  const [localTitle, setLocalTitle] = useState(column.title);
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+
+  useEffect(() => {
+    setLocalTitle(column.title);
+  }, [column.title]);
 
   return (
     <section
@@ -40,8 +48,24 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            value={localTitle}
+            onChange={(e) => setLocalTitle(e.target.value)}
+            onBlur={() => {
+              if (!localTitle.trim()) {
+                setLocalTitle(column.title);
+                return;
+              }
+              if (localTitle.trim() && localTitle !== column.title) {
+                onRename(column.id, localTitle.trim());
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setLocalTitle(column.title);
+                e.currentTarget.blur();
+              }
+            }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />
@@ -53,6 +77,7 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
+              onUpdate={onUpdateCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
             />
           ))}
@@ -69,3 +94,4 @@ export const KanbanColumn = ({
     </section>
   );
 };
+

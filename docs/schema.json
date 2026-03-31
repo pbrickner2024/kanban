@@ -1,0 +1,135 @@
+{
+  "version": "1.0.0",
+  "description": "PM MVP SQLite Database Schema",
+  "tables": {
+    "users": {
+      "description": "User accounts. For MVP, only one hardcoded user.",
+      "columns": {
+        "id": {
+          "type": "TEXT PRIMARY KEY",
+          "description": "Unique user ID (e.g., 'user-1')"
+        },
+        "username": {
+          "type": "TEXT UNIQUE NOT NULL",
+          "description": "Login username"
+        },
+        "created_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        }
+      },
+      "indexes": ["username"]
+    },
+    "boards": {
+      "description": "Kanban boards. MVP: one board per user.",
+      "columns": {
+        "id": {
+          "type": "TEXT PRIMARY KEY",
+          "description": "Unique board ID (e.g., 'board-1')"
+        },
+        "user_id": {
+          "type": "TEXT NOT NULL UNIQUE",
+          "description": "Foreign key to users.id. UNIQUE enforces one board per user.",
+          "foreign_key": "users(id)"
+        },
+        "name": {
+          "type": "TEXT NOT NULL",
+          "description": "Board name (e.g., 'My Projects')"
+        },
+        "created_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        },
+        "updated_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        }
+      },
+      "indexes": ["user_id"]
+    },
+    "columns": {
+      "description": "Columns in a board (e.g., 'Backlog', 'In Progress', 'Done').",
+      "columns": {
+        "id": {
+          "type": "TEXT PRIMARY KEY",
+          "description": "Unique column ID (e.g., 'col-backlog')"
+        },
+        "board_id": {
+          "type": "TEXT NOT NULL",
+          "description": "Foreign key to boards.id",
+          "foreign_key": "boards(id)"
+        },
+        "title": {
+          "type": "TEXT NOT NULL",
+          "description": "Column title (renameable)"
+        },
+        "position": {
+          "type": "INTEGER NOT NULL",
+          "description": "Column order (0-indexed left to right)"
+        },
+        "created_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        }
+      },
+      "indexes": ["board_id", "position"]
+    },
+    "cards": {
+      "description": "Cards in a column.",
+      "columns": {
+        "id": {
+          "type": "TEXT PRIMARY KEY",
+          "description": "Unique card ID (e.g., 'card-1')"
+        },
+        "column_id": {
+          "type": "TEXT NOT NULL",
+          "description": "Foreign key to columns.id",
+          "foreign_key": "columns(id)"
+        },
+        "title": {
+          "type": "TEXT NOT NULL",
+          "description": "Card title"
+        },
+        "details": {
+          "type": "TEXT",
+          "description": "Card details/description"
+        },
+        "position": {
+          "type": "INTEGER NOT NULL",
+          "description": "Card order within column (0-indexed top to bottom)"
+        },
+        "created_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        },
+        "updated_at": {
+          "type": "TEXT NOT NULL",
+          "description": "ISO 8601 timestamp"
+        }
+      },
+      "indexes": ["column_id", "position"]
+    }
+  },
+  "constraints": {
+    "foreign_keys": "ON",
+    "one_board_per_user": "boards.user_id is UNIQUE"
+  },
+  "example_flow": {
+    "step_1": "Create user: INSERT INTO users (id, username, created_at) VALUES ('user-1', 'user', '2026-03-29T...')",
+    "step_2": "Create board: INSERT INTO boards (id, user_id, name, created_at, updated_at) VALUES ('board-1', 'user-1', 'My Kanban', '2026-03-29T...', '2026-03-29T...')",
+    "step_3": "Create column: INSERT INTO columns (id, board_id, title, position, created_at) VALUES ('col-backlog', 'board-1', 'Backlog', 0, '2026-03-29T...')",
+    "step_4": "Create card: INSERT INTO cards (id, column_id, title, details, position, created_at, updated_at) VALUES ('card-1', 'col-backlog', 'Task 1', 'Details...', 0, '2026-03-29T...', '2026-03-29T...')"
+  },
+  "notes": {
+    "normalization": "Fully normalized for flexibility. Allows easy column and card reordering, multi-board expansion in future.",
+    "json_fields": "None used in MVP; all data atomic. Future: could store conversation history as JSON in a `messages` table if AI chat is added.",
+    "timestamps": "All times stored as ISO 8601 strings (timezone-agnostic). Backend should use UTC.",
+    "id_format": "Semantic IDs (e.g., 'card-1', 'col-backlog') for clarity. Could switch to UUIDs later.",
+    "future_extensions": [
+      "Add message table for AI conversation history",
+      "Add activity_log table for audit trail",
+      "Add tags table for card categorization",
+      "Add multi-board support (remove UNIQUE constraint on boards.user_id)"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+.git
+frontend/node_modules
+frontend/.next
+frontend/out
+backend/.venv
+.env

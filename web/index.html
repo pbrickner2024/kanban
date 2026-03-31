@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PM MVP Part 2</title>
+    <style>
+      :root {
+        --yellow: #ecad0a;
+        --blue: #209dd7;
+        --purple: #753991;
+        --navy: #032147;
+        --gray: #888888;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+        color: var(--navy);
+      }
+
+      .container {
+        max-width: 720px;
+        margin: 48px auto;
+        padding: 24px;
+        border: 1px solid #dce8f7;
+        border-top: 6px solid var(--yellow);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 16px 36px rgba(3, 33, 71, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+      }
+
+      p {
+        color: var(--gray);
+      }
+
+      button {
+        border: 0;
+        background: var(--purple);
+        color: #fff;
+        border-radius: 8px;
+        padding: 10px 16px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      code {
+        color: var(--blue);
+        font-weight: 600;
+      }
+
+      .result {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #f4f9ff;
+        border-left: 4px solid var(--blue);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Hello World</h1>
+      <p>This static page is served by the <code>web</code> service.</p>
+      <p>The button below calls the FastAPI backend at <code>/api/hello</code>.</p>
+      <button id="call-api" type="button">Call Backend API</button>
+      <div class="result" id="result">No API call yet.</div>
+    </main>
+
+    <script>
+      const resultEl = document.getElementById("result");
+      const buttonEl = document.getElementById("call-api");
+
+      buttonEl.addEventListener("click", async () => {
+        resultEl.textContent = "Loading...";
+
+        try {
+          const response = await fetch("http://localhost:8000/api/hello");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          resultEl.textContent = `Backend says: ${data.message}`;
+        } catch (error) {
+          resultEl.textContent = `Request failed: ${error.message}`;
+        }
+      });
+    </script>
+  </body>
+</html>

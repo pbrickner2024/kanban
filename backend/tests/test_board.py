@@ -4,8 +4,6 @@ Backend integration tests for the Kanban board API.
 Uses a temporary SQLite database per test run to stay isolated.
 """
 
-import sqlite3
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,7 +23,7 @@ def db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def client(db_path: Path):
-    """Create a TestClient backed by a fresh temporary database."""
+    """Create an authenticated TestClient backed by a fresh temporary database."""
     with patch("app.database.DB_PATH", db_path):
         from app.database import init_db
 
@@ -33,7 +31,58 @@ def client(db_path: Path):
         from app.main import app
 
         with TestClient(app) as c:
+            r = c.post("/api/auth/login", json={"username": "user", "password": "password"})
+            assert r.status_code == 200
+            token = r.json()["token"]
+
+            # Wrap request() to inject the auth header automatically.
+            _orig = c.request
+
+            def authed_request(method, url, **kwargs):
+                headers = dict(kwargs.pop("headers", {}) or {})
+                headers.setdefault("Authorization", f"Bearer {token}")
+                return _orig(method, url, headers=headers, **kwargs)
+
+            c.request = authed_request  # type: ignore[method-assign]
             yield c
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+
+def test_board_requires_auth(db_path):
+    with patch("app.database.DB_PATH", db_path):
+        from app.database import init_db
+        init_db()
+        from app.main import app
+        with TestClient(app) as c:
+            r = c.get("/api/board")
+            assert r.status_code == 401
+
+
+def test_login_invalid_credentials(db_path):
+    with patch("app.database.DB_PATH", db_path):
+        from app.database import init_db
+        init_db()
+        from app.main import app
+        with TestClient(app) as c:
+            r = c.post("/api/auth/login", json={"username": "wrong", "password": "wrong"})
+            assert r.status_code == 401
+
+
+def test_logout_invalidates_token(db_path):
+    with patch("app.database.DB_PATH", db_path):
+        from app.database import init_db
+        init_db()
+        from app.main import app
+        with TestClient(app) as c:
+            r = c.post("/api/auth/login", json={"username": "user", "password": "password"})
+            token = r.json()["token"]
+            c.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+            r2 = c.get("/api/board", headers={"Authorization": f"Bearer {token}"})
+            assert r2.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +157,11 @@ def test_rename_column_not_found(client):
     assert r.status_code == 404
 
 
+def test_rename_column_title_too_long(client):
+    r = client.patch("/api/board/columns/col-backlog", json={"title": "x" * 201})
+    assert r.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # POST /api/board/columns/{id}/cards — create card
 # ---------------------------------------------------------------------------
@@ -144,6 +198,17 @@ def test_create_card_with_details(client):
     )
     assert r.status_code == 201
     assert r.json()["details"] == "Some notes"
+
+
+def test_create_card_title_too_long(client):
+    r = client.post("/api/board/columns/col-backlog/cards", json={"title": "x" * 201})
+    assert r.status_code == 422
+
+
+def test_create_card_id_is_unique(client):
+    r1 = client.post("/api/board/columns/col-backlog/cards", json={"title": "A"})
+    r2 = client.post("/api/board/columns/col-backlog/cards", json={"title": "B"})
+    assert r1.json()["id"] != r2.json()["id"]
 
 
 # ---------------------------------------------------------------------------

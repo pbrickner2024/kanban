@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { LoginPage } from "@/components/LoginPage";
 import { AuthProvider, useAuth } from "@/components/AuthContext";
@@ -11,6 +11,31 @@ function TestWrapper() {
     <LoginPage />
   );
 }
+
+// Mock fetch: successful login returns a token; anything else rejects.
+function mockFetchSuccess() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "test-token-abc" }),
+    })
+  );
+}
+
+function mockFetchFailure() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ detail: "Invalid credentials" }),
+    })
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("LoginPage", () => {
   it("renders the login form", () => {
@@ -49,6 +74,7 @@ describe("LoginPage", () => {
   });
 
   it("displays error for invalid credentials", async () => {
+    mockFetchFailure();
     render(
       <AuthProvider>
         <LoginPage />
@@ -62,19 +88,18 @@ describe("LoginPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
-      expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument();
+      expect(screen.getByText(/invalid username or password/i)).toBeInTheDocument();
     });
   });
 
   it("clears password field on login error", async () => {
+    mockFetchFailure();
     render(
       <AuthProvider>
         <LoginPage />
       </AuthProvider>
     );
-    const passwordInput = screen.getByLabelText(
-      /password/i
-    ) as HTMLInputElement;
+    const passwordInput = screen.getByLabelText(/password/i) as HTMLInputElement;
     fireEvent.change(screen.getByLabelText(/username/i), {
       target: { value: "wrong" },
     });
@@ -86,6 +111,7 @@ describe("LoginPage", () => {
   });
 
   it("successfully logs in with correct credentials", async () => {
+    mockFetchSuccess();
     render(
       <AuthProvider>
         <TestWrapper />

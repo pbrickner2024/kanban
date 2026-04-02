@@ -8,17 +8,16 @@ import {
   ReactNode,
 } from "react";
 import {
-  validateCredentials,
   setAuthToken,
   clearAuthToken,
   isAuthenticated as checkIsAuthenticated,
-  generateAuthToken,
 } from "@/lib/auth";
+import { loginApi, logoutApi } from "@/lib/api";
 
 type AuthContextValue = {
   isAuthenticated: boolean;
-  login: (username: string, password: string) => boolean;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 };
 
@@ -33,17 +32,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = (username: string, password: string): boolean => {
-    if (validateCredentials(username, password)) {
-      const token = generateAuthToken();
+  const login = async (username: string, password: string): Promise<boolean> => {
+    try {
+      const token = await loginApi(username, password);
       setAuthToken(token);
       setIsAuthenticated(true);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
+  const logout = async (): Promise<void> => {
+    await logoutApi();
     clearAuthToken();
     setIsAuthenticated(false);
   };

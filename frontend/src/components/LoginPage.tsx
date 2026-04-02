@@ -9,7 +9,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -18,9 +18,9 @@ export function LoginPage() {
       return;
     }
 
-    const success = login(username, password);
+    const success = await login(username, password);
     if (!success) {
-      setError("Invalid credentials. Try user / password");
+      setError("Invalid username or password");
       setPassword("");
     }
   };

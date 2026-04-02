@@ -1,4 +1,5 @@
 import { boardFromApi, type BoardData, type Card } from "@/lib/kanban";
+import { getAuthToken } from "@/lib/auth";
 
 const BASE = "/api";
 
@@ -25,13 +26,52 @@ export type ChatResponse = {
   kanban_update: KanbanUpdate | null;
 };
 
+export class ApiError extends Error {
+  constructor(public status: number, path: string) {
+    super(`API error ${status}: ${path}`);
+  }
+}
+
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string>),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  if (!res.ok) throw new ApiError(res.status, path);
   return res;
+}
+
+export async function loginApi(username: string, password: string): Promise<string> {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) throw new Error("Invalid credentials");
+  const data = await res.json();
+  return data.token;
+}
+
+export async function logoutApi(): Promise<void> {
+  const token = getAuthToken();
+  if (!token) return;
+  await fetch(`${BASE}/auth/logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  }).catch(() => {
+    // best-effort — token will be cleared client-side regardless
+  });
 }
 
 export async function fetchBoard(): Promise<BoardData> {

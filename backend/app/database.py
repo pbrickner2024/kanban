@@ -64,6 +64,9 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (column_id) REFERENCES columns(id)
             );
+
+            CREATE INDEX IF NOT EXISTS idx_columns_board_id ON columns(board_id);
+            CREATE INDEX IF NOT EXISTS idx_cards_column_id ON cards(column_id);
         """)
         _seed(conn)
     conn.close()

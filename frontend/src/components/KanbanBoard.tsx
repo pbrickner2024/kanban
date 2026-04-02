@@ -17,6 +17,7 @@ import { AiSidebar } from "@/components/AiSidebar";
 import { moveCard, type BoardData } from "@/lib/kanban";
 import { useAuth } from "@/components/AuthContext";
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { applyKanbanOperations } from "@/lib/aiOps";
 
 export const KanbanBoard = () => {
@@ -35,7 +36,13 @@ export const KanbanBoard = () => {
         setBoard(b);
         setBoardError(false);
       })
-      .catch(() => setBoardError(true));
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          logout();
+        } else {
+          setBoardError(true);
+        }
+      });
 
   useEffect(() => {
     refetch();

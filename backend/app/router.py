@@ -1,15 +1,17 @@
-﻿"""
+"""
 Kanban board API routes.
 
 All routes operate on user-1's board (MVP: hardcoded user).
 """
 
 import time
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app import ai as ai_module
+from app.auth import login as auth_login, logout as auth_logout, require_auth
 from app.database import get_db
 from app.models import (
     BoardOut,
@@ -18,6 +20,8 @@ from app.models import (
     ChatOut,
     ColumnOut,
     CreateCardIn,
+    LoginIn,
+    LoginOut,
     MoveCardIn,
     RenameColumnIn,
     UpdateCardIn,
@@ -26,6 +30,10 @@ from app.models import (
 router = APIRouter(prefix="/api", tags=["board"])
 
 HARDCODED_USER_ID = "user-1"
+
+# Simple per-process rate limit for the AI endpoint (single-user MVP).
+_ai_last_call: float = 0.0
+_AI_RATE_LIMIT_SECONDS = 5.0
 
 
 def _now() -> str:
@@ -41,13 +49,8 @@ def _get_board_id(conn) -> str:
     return row["id"]
 
 
-# ---------------------------------------------------------------------------
-# GET /api/board
-# ---------------------------------------------------------------------------
-
-
-@router.get("/board", response_model=BoardOut)
-def get_board():
+def _fetch_board() -> BoardOut:
+    """Internal helper — fetches the full board without going through the route."""
     conn = get_db()
     try:
         board_id = _get_board_id(conn)
@@ -79,12 +82,45 @@ def get_board():
 
 
 # ---------------------------------------------------------------------------
+# POST /api/auth/login  (no auth required)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/auth/login", response_model=LoginOut)
+def login(body: LoginIn):
+    token = auth_login(body.username, body.password)
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return LoginOut(token=token)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/logout
+# ---------------------------------------------------------------------------
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(token: str = Depends(require_auth)):
+    auth_logout(token)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/board
+# ---------------------------------------------------------------------------
+
+
+@router.get("/board", response_model=BoardOut)
+def get_board(token: str = Depends(require_auth)):
+    return _fetch_board()
+
+
+# ---------------------------------------------------------------------------
 # PATCH /api/board/columns/{column_id} - rename column
 # ---------------------------------------------------------------------------
 
 
 @router.patch("/board/columns/{column_id}", response_model=ColumnOut)
-def rename_column(column_id: str, body: RenameColumnIn):
+def rename_column(column_id: str, body: RenameColumnIn, token: str = Depends(require_auth)):
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="Title cannot be empty")
     conn = get_db()
@@ -120,7 +156,7 @@ def rename_column(column_id: str, body: RenameColumnIn):
 
 
 @router.post("/board/columns/{column_id}/cards", response_model=CardOut, status_code=201)
-def create_card(column_id: str, body: CreateCardIn):
+def create_card(column_id: str, body: CreateCardIn, token: str = Depends(require_auth)):
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="Title cannot be empty")
     conn = get_db()
@@ -139,7 +175,7 @@ def create_card(column_id: str, body: CreateCardIn):
         ).fetchone()[0]
         position = max_pos + 1
         now = _now()
-        card_id = f"card-{int(time.time() * 1000)}"
+        card_id = f"card-{uuid.uuid4().hex}"
 
         with conn:
             conn.execute(
@@ -161,7 +197,7 @@ def create_card(column_id: str, body: CreateCardIn):
 
 
 @router.patch("/board/cards/{card_id}", response_model=CardOut)
-def update_card(card_id: str, body: UpdateCardIn):
+def update_card(card_id: str, body: UpdateCardIn, token: str = Depends(require_auth)):
     conn = get_db()
     try:
         board_id = _get_board_id(conn)
@@ -205,7 +241,7 @@ def update_card(card_id: str, body: UpdateCardIn):
 
 
 @router.delete("/board/cards/{card_id}", status_code=204)
-def delete_card(card_id: str):
+def delete_card(card_id: str, token: str = Depends(require_auth)):
     conn = get_db()
     try:
         board_id = _get_board_id(conn)
@@ -238,7 +274,7 @@ def delete_card(card_id: str):
 
 
 @router.patch("/board/cards/{card_id}/move", response_model=CardOut)
-def move_card(card_id: str, body: MoveCardIn):
+def move_card(card_id: str, body: MoveCardIn, token: str = Depends(require_auth)):
     conn = get_db()
     try:
         board_id = _get_board_id(conn)
@@ -276,7 +312,12 @@ def move_card(card_id: str, body: MoveCardIn):
         dst_pos = max(0, min(dst_pos, max_dst_pos))
 
         now = _now()
-        with conn:
+
+        # Use BEGIN IMMEDIATE to prevent concurrent moves from producing
+        # inconsistent position values.
+        conn.isolation_level = None  # manual transaction control
+        conn.execute("BEGIN IMMEDIATE")
+        try:
             if src_col_id == dst_col_id:
                 if src_pos < dst_pos:
                     conn.execute(
@@ -302,6 +343,10 @@ def move_card(card_id: str, body: MoveCardIn):
                 "UPDATE cards SET column_id = ?, position = ?, updated_at = ? WHERE id = ?",
                 (dst_col_id, dst_pos, now, card_id),
             )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
 
         updated = conn.execute(
             "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE id = ?",
@@ -318,11 +363,40 @@ def move_card(card_id: str, body: MoveCardIn):
 
 
 @router.post("/ai/chat", response_model=ChatOut)
-def ai_chat(body: ChatIn):
+def ai_chat(body: ChatIn, token: str = Depends(require_auth)):
+    global _ai_last_call
+    now = time.time()
+    if now - _ai_last_call < _AI_RATE_LIMIT_SECONDS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests — please wait {_AI_RATE_LIMIT_SECONDS:.0f} seconds between AI calls",
+        )
+    _ai_last_call = now
+
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     try:
-        board_json = get_board().model_dump()
+        board_out = _fetch_board()
+        board_json = board_out.model_dump()
         ai_result = ai_module.chat(board=board_json, messages=messages)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return ChatOut.model_validate(ai_result)
+
+    validated = ChatOut.model_validate(ai_result)
+
+    # Validate that any IDs the AI references actually exist on the board.
+    if validated.kanban_update:
+        valid_col_ids = {col.id for col in board_out.columns}
+        valid_card_ids = {card.id for col in board_out.columns for card in col.cards}
+        for op in validated.kanban_update.operations:
+            if op.column_id and op.column_id not in valid_col_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"AI referenced unknown column: {op.column_id}",
+                )
+            if op.card_id and op.card_id not in valid_card_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"AI referenced unknown card: {op.card_id}",
+                )
+
+    return validated

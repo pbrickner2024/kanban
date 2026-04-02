@@ -1,8 +1,8 @@
-﻿"""Pydantic models for request/response shapes."""
+"""Pydantic models for request/response shapes."""
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CardOut(BaseModel):
@@ -30,18 +30,27 @@ class BoardOut(BaseModel):
     columns: list[ColumnOut] = []
 
 
+class LoginIn(BaseModel):
+    username: str = Field(max_length=100)
+    password: str = Field(max_length=200)
+
+
+class LoginOut(BaseModel):
+    token: str
+
+
 class RenameColumnIn(BaseModel):
-    title: str
+    title: str = Field(max_length=200)
 
 
 class CreateCardIn(BaseModel):
-    title: str
-    details: str | None = None
+    title: str = Field(max_length=200)
+    details: str | None = Field(default=None, max_length=10000)
 
 
 class UpdateCardIn(BaseModel):
-    title: str | None = None
-    details: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    details: str | None = Field(default=None, max_length=10000)
 
 
 class MoveCardIn(BaseModel):
@@ -50,12 +59,12 @@ class MoveCardIn(BaseModel):
 
 
 class ChatMessageIn(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=20)
+    content: str = Field(max_length=4000)
 
 
 class ChatIn(BaseModel):
-    messages: list[ChatMessageIn]
+    messages: list[ChatMessageIn] = Field(max_length=50)
 
 
 class KanbanOperation(BaseModel):

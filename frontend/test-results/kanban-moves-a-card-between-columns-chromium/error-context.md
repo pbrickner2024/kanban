@@ -1,0 +1,177 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]:
+    - img [ref=e8]
+  - alert [ref=e11]
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - paragraph [ref=e17]: Single Board Kanban
+          - heading "Kanban Studio" [level=1] [ref=e18]
+          - paragraph [ref=e19]: Keep momentum visible. Rename columns, drag cards between stages, and capture quick notes without getting buried in settings.
+        - generic [ref=e20]:
+          - generic [ref=e21]:
+            - paragraph [ref=e22]: Focus
+            - paragraph [ref=e23]: One board. Five columns. Zero clutter.
+          - button "Sign Out" [ref=e24]
+      - generic [ref=e25]:
+        - generic [ref=e26]: Backlog
+        - generic [ref=e28]: Discovery
+        - generic [ref=e30]: In Progress
+        - generic [ref=e32]: Review
+        - generic [ref=e34]: Done
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e40]:
+            - generic [ref=e43]: 6 cards
+            - textbox "Column title" [ref=e44]: Backlog
+          - generic [ref=e45]:
+            - button "Gather customer signals Review support tags, sales notes, and churn feedback. Edit Gather customer signals Delete Gather customer signals" [ref=e46]:
+              - generic [ref=e47]:
+                - generic [ref=e48]:
+                  - heading "Gather customer signals" [level=4] [ref=e49]
+                  - paragraph [ref=e50]: Review support tags, sales notes, and churn feedback.
+                - generic [ref=e51]:
+                  - button "Edit Gather customer signals" [ref=e52]: Edit
+                  - button "Delete Gather customer signals" [ref=e53]: Remove
+            - button "Playwright card Added via e2e. Edit Playwright card Delete Playwright card" [ref=e54]:
+              - generic [ref=e55]:
+                - generic [ref=e56]:
+                  - heading "Playwright card" [level=4] [ref=e57]
+                  - paragraph [ref=e58]: Added via e2e.
+                - generic [ref=e59]:
+                  - button "Edit Playwright card" [ref=e60]: Edit
+                  - button "Delete Playwright card" [ref=e61]: Remove
+            - button "Playwright card Added via e2e. Edit Playwright card Delete Playwright card" [ref=e62]:
+              - generic [ref=e63]:
+                - generic [ref=e64]:
+                  - heading "Playwright card" [level=4] [ref=e65]
+                  - paragraph [ref=e66]: Added via e2e.
+                - generic [ref=e67]:
+                  - button "Edit Playwright card" [ref=e68]: Edit
+                  - button "Delete Playwright card" [ref=e69]: Remove
+            - button "Playwright card Added via e2e. Edit Playwright card Delete Playwright card" [ref=e70]:
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - heading "Playwright card" [level=4] [ref=e73]
+                  - paragraph [ref=e74]: Added via e2e.
+                - generic [ref=e75]:
+                  - button "Edit Playwright card" [ref=e76]: Edit
+                  - button "Delete Playwright card" [ref=e77]: Remove
+            - button "Playwright card 1775319752342 Added via e2e. Edit Playwright card 1775319752342 Delete Playwright card 1775319752342" [ref=e78]:
+              - generic [ref=e79]:
+                - generic [ref=e80]:
+                  - heading "Playwright card 1775319752342" [level=4] [ref=e81]
+                  - paragraph [ref=e82]: Added via e2e.
+                - generic [ref=e83]:
+                  - button "Edit Playwright card 1775319752342" [ref=e84]: Edit
+                  - button "Delete Playwright card 1775319752342" [ref=e85]: Remove
+            - button "Playwright card 1775319760135 Added via e2e. Edit Playwright card 1775319760135 Delete Playwright card 1775319760135" [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e88]:
+                  - heading "Playwright card 1775319760135" [level=4] [ref=e89]
+                  - paragraph [ref=e90]: Added via e2e.
+                - generic [ref=e91]:
+                  - button "Edit Playwright card 1775319760135" [ref=e92]: Edit
+                  - button "Delete Playwright card 1775319760135" [ref=e93]: Remove
+          - button "Add a card" [ref=e95]
+        - generic [ref=e96]:
+          - generic [ref=e98]:
+            - generic [ref=e101]: 1 cards
+            - textbox "Column title" [ref=e102]: Discovery
+          - button "Prototype analytics view Sketch initial dashboard layout and key drill-downs. Edit Prototype analytics view Delete Prototype analytics view" [ref=e104]:
+            - generic [ref=e105]:
+              - generic [ref=e106]:
+                - heading "Prototype analytics view" [level=4] [ref=e107]
+                - paragraph [ref=e108]: Sketch initial dashboard layout and key drill-downs.
+              - generic [ref=e109]:
+                - button "Edit Prototype analytics view" [ref=e110]: Edit
+                - button "Delete Prototype analytics view" [ref=e111]: Remove
+          - button "Add a card" [ref=e113]
+        - generic [ref=e114]:
+          - generic [ref=e116]:
+            - generic [ref=e119]: 2 cards
+            - textbox "Column title" [ref=e120]: In Progress
+          - generic [ref=e121]:
+            - button "Refine status language Standardize column labels and tone across the board. Edit Refine status language Delete Refine status language" [ref=e122]:
+              - generic [ref=e123]:
+                - generic [ref=e124]:
+                  - heading "Refine status language" [level=4] [ref=e125]
+                  - paragraph [ref=e126]: Standardize column labels and tone across the board.
+                - generic [ref=e127]:
+                  - button "Edit Refine status language" [ref=e128]: Edit
+                  - button "Delete Refine status language" [ref=e129]: Remove
+            - button "Design card layout Add hierarchy and spacing for scanning dense lists. Edit Design card layout Delete Design card layout" [ref=e130]:
+              - generic [ref=e131]:
+                - generic [ref=e132]:
+                  - heading "Design card layout" [level=4] [ref=e133]
+                  - paragraph [ref=e134]: Add hierarchy and spacing for scanning dense lists.
+                - generic [ref=e135]:
+                  - button "Edit Design card layout" [ref=e136]: Edit
+                  - button "Delete Design card layout" [ref=e137]: Remove
+          - button "Add a card" [ref=e139]
+        - generic [ref=e140]:
+          - generic [ref=e142]:
+            - generic [ref=e145]: 2 cards
+            - textbox "Column title" [ref=e146]: Review
+          - generic [ref=e147]:
+            - button "QA micro-interactions Verify hover, focus, and loading states. Edit QA micro-interactions Delete QA micro-interactions" [ref=e148]:
+              - generic [ref=e149]:
+                - generic [ref=e150]:
+                  - heading "QA micro-interactions" [level=4] [ref=e151]
+                  - paragraph [ref=e152]: Verify hover, focus, and loading states.
+                - generic [ref=e153]:
+                  - button "Edit QA micro-interactions" [ref=e154]: Edit
+                  - button "Delete QA micro-interactions" [ref=e155]: Remove
+            - button "Align roadmap themes Draft quarterly themes with impact statements and metrics. Edit Align roadmap themes Delete Align roadmap themes" [ref=e156]:
+              - generic [ref=e157]:
+                - generic [ref=e158]:
+                  - heading "Align roadmap themes" [level=4] [ref=e159]
+                  - paragraph [ref=e160]: Draft quarterly themes with impact statements and metrics.
+                - generic [ref=e161]:
+                  - button "Edit Align roadmap themes" [ref=e162]: Edit
+                  - button "Delete Align roadmap themes" [ref=e163]: Remove
+          - button "Add a card" [ref=e165]
+        - generic [ref=e166]:
+          - generic [ref=e168]:
+            - generic [ref=e171]: 2 cards
+            - textbox "Column title" [ref=e172]: Done
+          - generic [ref=e173]:
+            - button "Set up project repo Initial Kanban structure and tooling in place. Edit Set up project repo Delete Set up project repo" [ref=e174]:
+              - generic [ref=e175]:
+                - generic [ref=e176]:
+                  - heading "Set up project repo" [level=4] [ref=e177]
+                  - paragraph [ref=e178]: Initial Kanban structure and tooling in place.
+                - generic [ref=e179]:
+                  - button "Edit Set up project repo" [ref=e180]: Edit
+                  - button "Delete Set up project repo" [ref=e181]: Remove
+            - button "Define MVP scope Locked list of features for the first release. Edit Define MVP scope Delete Define MVP scope" [ref=e182]:
+              - generic [ref=e183]:
+                - generic [ref=e184]:
+                  - heading "Define MVP scope" [level=4] [ref=e185]
+                  - paragraph [ref=e186]: Locked list of features for the first release.
+                - generic [ref=e187]:
+                  - button "Edit Define MVP scope" [ref=e188]: Edit
+                  - button "Delete Define MVP scope" [ref=e189]: Remove
+          - button "Add a card" [ref=e191]
+      - status [ref=e192]
+      - complementary [ref=e194]:
+        - generic [ref=e195]:
+          - generic [ref=e196]:
+            - paragraph [ref=e197]: AI Copilot
+            - heading "Board Assistant" [level=2] [ref=e198]
+          - generic [ref=e199]: Live
+        - paragraph [ref=e200]: Ask for planning help or direct board changes.
+        - generic [ref=e201]:
+          - button "Move the top backlog card to Done." [ref=e202]
+          - button "Create a card in Discovery called User interview prep." [ref=e203]
+          - button "Rename In Progress to Doing." [ref=e204]
+        - paragraph [ref=e206]: "Try: \"Move card-1 to Done\" or \"Create a card in Backlog for API docs\"."
+        - generic [ref=e207]:
+          - textbox "Ask the AI to plan or update the board..." [ref=e208]
+          - button "Send" [disabled] [ref=e209]
+```

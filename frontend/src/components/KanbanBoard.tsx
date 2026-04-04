@@ -169,17 +169,20 @@ export const KanbanBoard = () => {
 
       const ops = ai.kanban_update?.operations ?? [];
       if (ops.length > 0) {
-        const count = await applyKanbanOperations(ops, {
-          renameColumn: api.renameColumn,
-          createCard: async (columnId, title, details) => {
-            await api.createCard(columnId, title, details);
-          },
-          updateCard: api.updateCardPartial,
-          deleteCard: api.deleteCard,
-          moveCard: api.moveCard,
-        });
-        setLastAppliedCount(count);
-        if (count > 0) await refetch();
+        try {
+          const count = await applyKanbanOperations(ops, {
+            renameColumn: api.renameColumn,
+            createCard: async (columnId, title, details) => {
+              await api.createCard(columnId, title, details);
+            },
+            updateCard: api.updateCardPartial,
+            deleteCard: api.deleteCard,
+            moveCard: api.moveCard,
+          });
+          setLastAppliedCount(count);
+        } finally {
+          await refetch();
+        }
       }
     } catch (error) {
       console.error(error);
@@ -311,4 +314,3 @@ export const KanbanBoard = () => {
     </div>
   );
 };
-

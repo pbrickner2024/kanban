@@ -185,6 +185,31 @@ def test_ai_chat_rejects_unknown_card_id(client):
     assert "card-does-not-exist" in r.json()["detail"]
 
 
+def test_ai_chat_allows_create_card_with_new_card_id(client):
+    with patch(
+        "app.router.ai_module.chat",
+        return_value={
+            "reply": "Created it.",
+            "kanban_update": {
+                "operations": [
+                    {
+                        "action": "create_card",
+                        "card_id": "card-from-ai",
+                        "column_id": "col-backlog",
+                        "title": "New task",
+                    }
+                ]
+            },
+        },
+    ):
+        r = client.post(
+            "/api/ai/chat",
+            json={"messages": [{"role": "user", "content": "Create a new task"}]},
+        )
+    assert r.status_code == 200
+    assert r.json()["kanban_update"]["operations"][0]["action"] == "create_card"
+
+
 def test_ai_chat_rejects_unknown_column_id(client):
     with patch(
         "app.router.ai_module.chat",

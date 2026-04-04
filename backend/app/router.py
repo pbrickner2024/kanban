@@ -169,19 +169,27 @@ def create_card(column_id: str, body: CreateCardIn, token: str = Depends(require
         if not col_row:
             raise HTTPException(status_code=404, detail="Column not found")
 
-        max_pos = conn.execute(
-            "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ?",
-            (column_id,),
-        ).fetchone()[0]
-        position = max_pos + 1
         now = _now()
         card_id = f"card-{uuid.uuid4().hex}"
 
-        with conn:
+        # Lock writes while reading the current max position so concurrent
+        # card creation cannot assign the same slot twice.
+        conn.isolation_level = None  # manual transaction control
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            max_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ?",
+                (column_id,),
+            ).fetchone()[0]
+            position = max_pos + 1
             conn.execute(
                 "INSERT INTO cards (id, column_id, title, details, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (card_id, column_id, body.title.strip(), body.details, position, now, now),
             )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         row = conn.execute(
             "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE id = ?",
             (card_id,),
@@ -393,7 +401,7 @@ def ai_chat(body: ChatIn, token: str = Depends(require_auth)):
                     status_code=422,
                     detail=f"AI referenced unknown column: {op.column_id}",
                 )
-            if op.card_id and op.card_id not in valid_card_ids:
+            if op.action != "create_card" and op.card_id and op.card_id not in valid_card_ids:
                 raise HTTPException(
                     status_code=422,
                     detail=f"AI referenced unknown card: {op.card_id}",

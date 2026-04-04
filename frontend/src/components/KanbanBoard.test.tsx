@@ -4,6 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { AuthProvider } from "@/components/AuthContext";
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 const mockBoard = {
   id: "board-1",
   name: "My Kanban",
@@ -79,6 +89,18 @@ describe("KanbanBoard", () => {
   });
 
   it("shows loading state before board arrives", () => {
+    const pendingBoard = createDeferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+        const method = opts?.method ?? "GET";
+        if (method === "GET") {
+          return pendingBoard.promise;
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      })
+    );
+
     renderBoard();
     expect(screen.getByText(/loading board/i)).toBeInTheDocument();
   });
@@ -203,5 +225,68 @@ describe("KanbanBoard", () => {
       ).toBe(true);
     });
   });
-});
 
+  it("refetches the board after a partial AI apply failure", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const updatedBoard = {
+      ...mockBoard,
+      columns: mockBoard.columns.map((column) =>
+        column.id === "col-backlog" ? { ...column, title: "Ideas" } : column
+      ),
+    };
+    let boardFetches = 0;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+        const method = opts?.method ?? "GET";
+        if (url.includes("/api/ai/chat") && method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                reply: "I started updating the board.",
+                kanban_update: {
+                  operations: [
+                    { action: "rename_column", column_id: "col-backlog", title: "Ideas" },
+                    { action: "move_card", card_id: "card-missing", column_id: "col-done", position: 0 },
+                  ],
+                },
+              }),
+          });
+        }
+        if (method === "PATCH" && url.includes("/api/board/columns/col-backlog")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        }
+        if (method === "PATCH" && url.includes("/api/board/cards/card-missing/move")) {
+          return Promise.resolve({ ok: false, status: 404 });
+        }
+        if (method === "GET") {
+          boardFetches += 1;
+          const board = boardFetches > 1 ? updatedBoard : mockBoard;
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(board) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      })
+    );
+
+    try {
+      renderBoard();
+      await screen.findAllByTestId(/column-/i);
+
+      await userEvent.type(
+        screen.getByPlaceholderText(/ask the ai to plan or update the board/i),
+        "Rename backlog and then move a missing card"
+      );
+      await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(
+        await screen.findByText(/i could not complete that request right now/i)
+      ).toBeInTheDocument();
+      expect(await screen.findByDisplayValue("Ideas")).toBeInTheDocument();
+      expect(boardFetches).toBeGreaterThan(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});

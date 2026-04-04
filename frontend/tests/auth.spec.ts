@@ -17,7 +17,7 @@ test.describe("Login and Authentication Flow", () => {
     await page.fill("input[placeholder='Enter username']", "wrong");
     await page.fill("input[placeholder='Enter password']", "wrong");
     await page.click("button:has-text('Sign In')");
-    await expect(page.locator("text=Invalid credentials")).toBeVisible();
+    await expect(page.locator("text=Invalid username or password")).toBeVisible();
   });
 
   test("should show error for empty credentials", async ({ page }) => {

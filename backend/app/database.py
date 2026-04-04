@@ -6,11 +6,13 @@ initialised.  The hardcoded MVP user, board and default columns are seeded
 if they do not already exist.
 """
 
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(Path(__file__).parent.parent, "pm.db")
+DEFAULT_DB_PATH = Path(Path(__file__).parent.parent, "pm.db")
+DB_PATH = Path(os.environ.get("PM_DB_PATH", str(DEFAULT_DB_PATH)))
 
 
 def _now() -> str:
@@ -19,6 +21,7 @@ def _now() -> str:
 
 def get_db() -> sqlite3.Connection:
     """Return a thread-local SQLite connection with row_factory and FK support."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

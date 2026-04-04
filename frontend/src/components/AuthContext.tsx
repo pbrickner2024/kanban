@@ -3,14 +3,14 @@
 import {
   createContext,
   useContext,
-  useState,
-  useEffect,
-  ReactNode,
+  type ReactNode,
+  useSyncExternalStore,
 } from "react";
 import {
   setAuthToken,
   clearAuthToken,
   isAuthenticated as checkIsAuthenticated,
+  subscribeToAuth,
 } from "@/lib/auth";
 import { loginApi, logoutApi } from "@/lib/api";
 
@@ -23,20 +23,27 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+const subscribeToHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerSnapshot = () => false;
 
-  useEffect(() => {
-    setIsAuthenticated(checkIsAuthenticated());
-    setIsLoading(false);
-  }, []);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerSnapshot
+  );
+  const isAuthenticated = useSyncExternalStore(
+    subscribeToAuth,
+    checkIsAuthenticated,
+    getServerSnapshot
+  );
+  const isLoading = !isHydrated;
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       const token = await loginApi(username, password);
       setAuthToken(token);
-      setIsAuthenticated(true);
       return true;
     } catch {
       return false;
@@ -46,13 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async (): Promise<void> => {
     await logoutApi();
     clearAuthToken();
-    setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider
-      value={{ isAuthenticated, login, logout, isLoading }}
-    >
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

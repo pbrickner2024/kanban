@@ -81,7 +81,7 @@ export const AiSidebar = ({
       <div className="mb-3 h-[340px] overflow-y-auto rounded-2xl border border-[var(--stroke)] bg-white/80 p-3">
         {!hasMessages ? (
           <p className="text-sm text-[var(--gray-text)]">
-            Try: "Move card-1 to Done" or "Create a card in Backlog for API docs".
+            Try: &quot;Move card-1 to Done&quot; or &quot;Create a card in Backlog for API docs&quot;.
           </p>
         ) : (
           <div className="space-y-3">

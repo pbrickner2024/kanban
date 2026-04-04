@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
@@ -11,16 +11,8 @@ type KanbanCardProps = {
 };
 
 export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [localTitle, setLocalTitle] = useState(card.title);
-  const [localDetails, setLocalDetails] = useState(card.details);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setLocalTitle(card.title);
-      setLocalDetails(card.details);
-    }
-  }, [card.title, card.details, isEditing]);
+  const [draft, setDraft] = useState<{ title: string; details: string } | null>(null);
+  const isEditing = draft !== null;
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
@@ -30,11 +22,20 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
     transition,
   };
 
+  const startEditing = () => {
+    setDraft({ title: card.title, details: card.details });
+  };
+
+  const cancelEditing = () => {
+    setDraft(null);
+  };
+
   const handleSave = () => {
-    const trimmed = localTitle.trim();
+    if (!draft) return;
+    const trimmed = draft.title.trim();
     if (trimmed) {
-      onUpdate(card.id, trimmed, localDetails);
-      setIsEditing(false);
+      onUpdate(card.id, trimmed, draft.details);
+      setDraft(null);
     }
   };
 
@@ -49,22 +50,29 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
       >
         <div className="flex flex-col gap-2">
           <input
-            value={localTitle}
-            onChange={(e) => setLocalTitle(e.target.value)}
+            value={draft.title}
+            onChange={(e) =>
+              setDraft((current) =>
+                current ? { ...current, title: e.target.value } : current
+              )
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
-              if (e.key === "Escape") setIsEditing(false);
+              if (e.key === "Escape") cancelEditing();
             }}
             className="w-full rounded border border-[var(--stroke)] px-2 py-1 font-display text-base font-semibold text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
             aria-label="Card title"
-            // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
           />
           <input
-            value={localDetails}
-            onChange={(e) => setLocalDetails(e.target.value)}
+            value={draft.details}
+            onChange={(e) =>
+              setDraft((current) =>
+                current ? { ...current, details: e.target.value } : current
+              )
+            }
             onKeyDown={(e) => {
-              if (e.key === "Escape") setIsEditing(false);
+              if (e.key === "Escape") cancelEditing();
             }}
             className="w-full rounded border border-[var(--stroke)] px-2 py-1 text-sm text-[var(--gray-text)] outline-none focus:border-[var(--primary-blue)]"
             aria-label="Card details"
@@ -72,7 +80,7 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
+              onClick={cancelEditing}
               className="rounded-full border border-[var(--stroke)] px-3 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
             >
               Cancel
@@ -117,7 +125,7 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setIsEditing(true);
+              startEditing();
             }}
             className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
             aria-label={`Edit ${card.title}`}
@@ -137,4 +145,3 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
     </article>
   );
 };
-

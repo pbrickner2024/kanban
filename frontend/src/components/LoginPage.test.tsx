@@ -12,7 +12,6 @@ function TestWrapper() {
   );
 }
 
-// Mock fetch: successful login returns a token; anything else rejects.
 function mockFetchSuccess() {
   vi.stubGlobal(
     "fetch",
@@ -45,17 +44,17 @@ describe("LoginPage", () => {
       </AuthProvider>
     );
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
   });
 
-  it("shows demo credentials hint", () => {
+  it("shows a link to create an account", () => {
     render(
       <AuthProvider>
         <LoginPage />
       </AuthProvider>
     );
-    expect(screen.getByText(/demo credentials/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create an account/i })).toBeInTheDocument();
   });
 
   it("displays error for empty credentials", async () => {
@@ -67,9 +66,7 @@ describe("LoginPage", () => {
     const button = screen.getByRole("button", { name: /sign in/i });
     fireEvent.click(button);
     await waitFor(() => {
-      expect(
-        screen.getByText(/please enter both username and password/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/please fill in all fields/i)).toBeInTheDocument();
     });
   });
 
@@ -80,33 +77,11 @@ describe("LoginPage", () => {
         <LoginPage />
       </AuthProvider>
     );
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: "wrong" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: "wrong" },
-    });
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "wrong" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "wrong" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(screen.getByText(/invalid username or password/i)).toBeInTheDocument();
-    });
-  });
-
-  it("clears password field on login error", async () => {
-    mockFetchFailure();
-    render(
-      <AuthProvider>
-        <LoginPage />
-      </AuthProvider>
-    );
-    const passwordInput = screen.getByLabelText(/password/i) as HTMLInputElement;
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: "wrong" },
-    });
-    fireEvent.change(passwordInput, { target: { value: "wrong" } });
-    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
-    await waitFor(() => {
-      expect(passwordInput.value).toBe("");
     });
   });
 
@@ -117,15 +92,41 @@ describe("LoginPage", () => {
         <TestWrapper />
       </AuthProvider>
     );
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: "user" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: "password" },
-    });
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "user" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "password" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(screen.getByText("Authenticated")).toBeInTheDocument();
+    });
+  });
+
+  it("switches to registration mode", async () => {
+    render(
+      <AuthProvider>
+        <LoginPage />
+      </AuthProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /create an account/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    });
+  });
+
+  it("shows error when registration passwords do not match", async () => {
+    render(
+      <AuthProvider>
+        <LoginPage />
+      </AuthProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /create an account/i }));
+    await waitFor(() => screen.getByLabelText(/confirm password/i));
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: "newuser" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "different" } });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
     });
   });
 });

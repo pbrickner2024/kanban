@@ -12,12 +12,13 @@ import {
   isAuthenticated as checkIsAuthenticated,
   subscribeToAuth,
 } from "@/lib/auth";
-import { loginApi, logoutApi } from "@/lib/api";
+import { loginApi, logoutApi, registerApi } from "@/lib/api";
 
 type AuthContextValue = {
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  register: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   isLoading: boolean;
 };
 
@@ -55,8 +56,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuthToken();
   };
 
+  const register = async (
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await registerApi(username, password);
+      // Auto-login after successful registration
+      const token = await loginApi(username, password);
+      setAuthToken(token);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "Registration failed" };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, register, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

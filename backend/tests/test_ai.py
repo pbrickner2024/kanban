@@ -47,6 +47,7 @@ def client(db_path: Path):
                 return _orig(method, url, headers=headers, **kwargs)
 
             c.request = authed_request  # type: ignore[method-assign]
+            c.board_id = "board-1"  # type: ignore[attr-defined]
             yield c
 
 
@@ -66,7 +67,10 @@ def test_ai_chat_requires_auth(db_path):
         from app.main import app
         with TestClient(app) as c:
             with _mock_chat("hi"):
-                r = c.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+                r = c.post(
+                    "/api/ai/chat",
+                    json={"messages": [{"role": "user", "content": "hi"}], "board_id": "board-1"},
+                )
             assert r.status_code == 401
 
 
@@ -74,7 +78,10 @@ def test_ai_chat_returns_reply(client):
     with _mock_chat("4"):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "What is 2+2?"}]},
+            json={
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 200
     assert r.json()["reply"] == "4"
@@ -90,7 +97,8 @@ def test_ai_chat_passes_messages_to_client(client):
                 "messages": [
                     {"role": "system", "content": "You are helpful."},
                     {"role": "user", "content": "Hi"},
-                ]
+                ],
+                "board_id": client.board_id,
             },
         )
     _, kwargs = mock_fn.call_args
@@ -111,7 +119,8 @@ def test_ai_chat_multi_turn(client):
                     {"role": "user", "content": "What is the capital of France?"},
                     {"role": "assistant", "content": "I can help with that."},
                     {"role": "user", "content": "Answer please."},
-                ]
+                ],
+                "board_id": client.board_id,
             },
         )
     assert r.status_code == 200
@@ -119,10 +128,13 @@ def test_ai_chat_multi_turn(client):
 
 
 def test_ai_chat_missing_api_key_returns_503(client):
-    with patch("app.router.ai_module.chat", side_effect=RuntimeError("OPENROUTER_API_KEY environment variable not set")):
+    with patch(
+        "app.router.ai_module.chat",
+        side_effect=RuntimeError("OPENROUTER_API_KEY environment variable not set"),
+    ):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "Hello"}]},
+            json={"messages": [{"role": "user", "content": "Hello"}], "board_id": client.board_id},
         )
     assert r.status_code == 503
     assert "OPENROUTER_API_KEY" in r.json()["detail"]
@@ -130,7 +142,7 @@ def test_ai_chat_missing_api_key_returns_503(client):
 
 def test_ai_chat_empty_messages_passes_through(client):
     with _mock_chat("I need context"):
-        r = client.post("/api/ai/chat", json={"messages": []})
+        r = client.post("/api/ai/chat", json={"messages": [], "board_id": client.board_id})
     assert r.status_code == 200
 
 
@@ -153,7 +165,10 @@ def test_ai_chat_returns_structured_kanban_update(client):
     ):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "Move card-1 to done"}]},
+            json={
+                "messages": [{"role": "user", "content": "Move card-1 to done"}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 200
     assert r.json()["reply"] == "I moved the card."
@@ -179,7 +194,10 @@ def test_ai_chat_rejects_unknown_card_id(client):
     ):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "Move nonexistent card"}]},
+            json={
+                "messages": [{"role": "user", "content": "Move nonexistent card"}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 422
     assert "card-does-not-exist" in r.json()["detail"]
@@ -204,7 +222,10 @@ def test_ai_chat_allows_create_card_with_new_card_id(client):
     ):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "Create a new task"}]},
+            json={
+                "messages": [{"role": "user", "content": "Create a new task"}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 200
     assert r.json()["kanban_update"]["operations"][0]["action"] == "create_card"
@@ -228,7 +249,10 @@ def test_ai_chat_rejects_unknown_column_id(client):
     ):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "Add card to bad column"}]},
+            json={
+                "messages": [{"role": "user", "content": "Add card to bad column"}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 422
     assert "col-does-not-exist" in r.json()["detail"]
@@ -238,6 +262,28 @@ def test_ai_chat_message_too_long(client):
     with _mock_chat("ok"):
         r = client.post(
             "/api/ai/chat",
-            json={"messages": [{"role": "user", "content": "x" * 4001}]},
+            json={
+                "messages": [{"role": "user", "content": "x" * 4001}],
+                "board_id": client.board_id,
+            },
         )
     assert r.status_code == 422
+
+
+def test_ai_chat_board_not_owned_by_user_rejected(db_path):
+    """User B cannot trigger AI on user A's board."""
+    with patch("app.database.DB_PATH", db_path):
+        from app.database import init_db
+        init_db()
+        from app.main import app
+        with TestClient(app) as c:
+            c.post("/api/auth/register", json={"username": "userb", "password": "passwordb"})
+            r = c.post("/api/auth/login", json={"username": "userb", "password": "passwordb"})
+            token_b = r.json()["token"]
+            with _mock_chat("hi"):
+                r2 = c.post(
+                    "/api/ai/chat",
+                    headers={"Authorization": f"Bearer {token_b}"},
+                    json={"messages": [], "board_id": "board-1"},
+                )
+            assert r2.status_code == 404

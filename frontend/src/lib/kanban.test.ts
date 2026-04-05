@@ -34,8 +34,8 @@ describe("boardFromApi", () => {
 
   it("populates cards record from nested cards", () => {
     const board = boardFromApi(apiBoard);
-    expect(board.cards["card-1"]).toEqual({ id: "card-1", title: "Card One", details: "Details 1" });
-    expect(board.cards["card-2"]).toEqual({ id: "card-2", title: "Card Two", details: "Details 2" });
+    expect(board.cards["card-1"]).toMatchObject({ id: "card-1", title: "Card One", details: "Details 1" });
+    expect(board.cards["card-2"]).toMatchObject({ id: "card-2", title: "Card Two", details: "Details 2" });
   });
 
   it("handles columns with no cards", () => {

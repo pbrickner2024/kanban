@@ -4,6 +4,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+Priority = Literal["low", "medium", "high", "urgent"]
+
+VALID_COLOR_LABELS = {"red", "orange", "yellow", "green", "blue", "purple", "pink", "teal"}
+
 
 class CardOut(BaseModel):
     id: str
@@ -11,6 +15,9 @@ class CardOut(BaseModel):
     title: str
     details: str | None
     position: int
+    due_date: str | None = None
+    priority: Priority | None = None
+    color_label: str | None = None
     created_at: str
     updated_at: str
 
@@ -30,6 +37,13 @@ class BoardOut(BaseModel):
     columns: list[ColumnOut] = []
 
 
+class BoardSummary(BaseModel):
+    id: str
+    name: str
+    created_at: str
+    updated_at: str
+
+
 class LoginIn(BaseModel):
     username: str = Field(max_length=100)
     password: str = Field(max_length=200)
@@ -39,6 +53,27 @@ class LoginOut(BaseModel):
     token: str
 
 
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+class CreateBoardIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class RenameBoardIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class CreateColumnIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+class ReorderColumnsIn(BaseModel):
+    column_ids: list[str] = Field(min_length=1, max_length=50)
+
+
 class RenameColumnIn(BaseModel):
     title: str = Field(max_length=200)
 
@@ -46,11 +81,17 @@ class RenameColumnIn(BaseModel):
 class CreateCardIn(BaseModel):
     title: str = Field(max_length=200)
     details: str | None = Field(default=None, max_length=10000)
+    due_date: str | None = None
+    priority: Priority | None = None
+    color_label: str | None = None
 
 
 class UpdateCardIn(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     details: str | None = Field(default=None, max_length=10000)
+    due_date: str | None = None
+    priority: Priority | None = None
+    color_label: str | None = None
 
 
 class MoveCardIn(BaseModel):
@@ -65,6 +106,7 @@ class ChatMessageIn(BaseModel):
 
 class ChatIn(BaseModel):
     messages: list[ChatMessageIn] = Field(max_length=50)
+    board_id: str
 
 
 class KanbanOperation(BaseModel):

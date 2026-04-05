@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import type { Card, Column, Priority } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -10,9 +10,24 @@ type KanbanColumnProps = {
   column: Column;
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
-  onUpdateCard: (cardId: string, title: string, details: string) => void;
+  onAddCard: (
+    columnId: string,
+    title: string,
+    details: string,
+    extra?: { priority?: Priority | null; due_date?: string | null; color_label?: string | null }
+  ) => void;
+  onUpdateCard: (
+    cardId: string,
+    fields: {
+      title?: string;
+      details?: string;
+      priority?: Priority | null;
+      due_date?: string | null;
+      color_label?: string | null;
+    }
+  ) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onDeleteColumn: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -22,6 +37,7 @@ export const KanbanColumn = ({
   onAddCard,
   onUpdateCard,
   onDeleteCard,
+  onDeleteColumn,
 }: KanbanColumnProps) => {
   const [localTitle, setLocalTitle] = useState(column.title);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -59,7 +75,7 @@ export const KanbanColumn = ({
       data-testid={`column-${column.id}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
@@ -86,6 +102,15 @@ export const KanbanColumn = ({
             aria-label="Column title"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => onDeleteColumn(column.id)}
+          className="mt-1 rounded-full border border-transparent p-1 text-xs text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-red-500"
+          aria-label={`Delete column ${column.title}`}
+          title="Delete column"
+        >
+          &times;
+        </button>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
@@ -105,7 +130,7 @@ export const KanbanColumn = ({
         )}
       </div>
       <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
+        onAdd={(title, details, extra) => onAddCard(column.id, title, details, extra)}
       />
     </section>
   );

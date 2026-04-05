@@ -1,7 +1,29 @@
 """
 Kanban board API routes.
 
-All routes operate on user-1's board (MVP: hardcoded user).
+URL structure:
+  POST   /api/auth/login
+  POST   /api/auth/logout
+  POST   /api/auth/register
+
+  GET    /api/boards                                      list boards
+  POST   /api/boards                                      create board
+  GET    /api/boards/{board_id}                           get full board
+  PATCH  /api/boards/{board_id}                           rename board
+  DELETE /api/boards/{board_id}                           delete board
+
+  POST   /api/boards/{board_id}/columns                   create column
+  PATCH  /api/boards/{board_id}/columns/reorder           reorder all columns
+  PATCH  /api/boards/{board_id}/columns/{column_id}       rename column
+  DELETE /api/boards/{board_id}/columns/{column_id}       delete column
+
+  POST   /api/boards/{board_id}/columns/{col_id}/cards    create card
+  PATCH  /api/boards/{board_id}/cards/{card_id}           update card
+  DELETE /api/boards/{board_id}/cards/{card_id}           delete card
+  PATCH  /api/boards/{board_id}/cards/{card_id}/move      move card
+
+  POST   /api/ai/chat
+  GET    /api/health
 """
 
 import time
@@ -11,27 +33,36 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
 from app import ai as ai_module
-from app.auth import login as auth_login, logout as auth_logout, require_auth
+from app.auth import (
+    get_raw_token,
+    login as auth_login,
+    logout as auth_logout,
+    register as auth_register,
+    require_auth,
+)
 from app.database import get_db
 from app.models import (
     BoardOut,
+    BoardSummary,
     CardOut,
     ChatIn,
     ChatOut,
     ColumnOut,
+    CreateBoardIn,
     CreateCardIn,
+    CreateColumnIn,
     LoginIn,
     LoginOut,
     MoveCardIn,
+    RegisterIn,
+    RenameBoardIn,
     RenameColumnIn,
+    ReorderColumnsIn,
     UpdateCardIn,
 )
 
 router = APIRouter(prefix="/api", tags=["board"])
 
-HARDCODED_USER_ID = "user-1"
-
-# Simple per-process rate limit for the AI endpoint (single-user MVP).
 _ai_last_call: float = 0.0
 _AI_RATE_LIMIT_SECONDS = 5.0
 
@@ -40,33 +71,39 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _get_board_id(conn) -> str:
+def _get_board(conn, user_id: str, board_id: str):
+    """Validate board ownership and return the board row, or raise 404."""
     row = conn.execute(
-        "SELECT id FROM boards WHERE user_id = ?", (HARDCODED_USER_ID,)
+        "SELECT id, name, created_at, updated_at FROM boards WHERE id = ? AND user_id = ?",
+        (board_id, user_id),
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Board not found")
-    return row["id"]
+    return row
 
 
-def _fetch_board() -> BoardOut:
-    """Internal helper — fetches the full board without going through the route."""
+def _fetch_board_data(board_id: str) -> BoardOut:
+    """Fetch full board with columns and cards."""
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
         board_row = conn.execute(
             "SELECT id, name FROM boards WHERE id = ?", (board_id,)
         ).fetchone()
+        if not board_row:
+            raise HTTPException(status_code=404, detail="Board not found")
 
         col_rows = conn.execute(
-            "SELECT id, board_id, title, position, created_at FROM columns WHERE board_id = ? ORDER BY position",
+            "SELECT id, board_id, title, position, created_at FROM columns "
+            "WHERE board_id = ? ORDER BY position",
             (board_id,),
         ).fetchall()
 
         columns = []
         for col in col_rows:
             card_rows = conn.execute(
-                "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE column_id = ? ORDER BY position",
+                "SELECT id, column_id, title, details, position, "
+                "due_date, priority, color_label, created_at, updated_at "
+                "FROM cards WHERE column_id = ? ORDER BY position",
                 (col["id"],),
             ).fetchall()
             columns.append(
@@ -82,7 +119,7 @@ def _fetch_board() -> BoardOut:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/auth/login  (no auth required)
+# Auth
 # ---------------------------------------------------------------------------
 
 
@@ -94,38 +131,188 @@ def login(body: LoginIn):
     return LoginOut(token=token)
 
 
-# ---------------------------------------------------------------------------
-# POST /api/auth/logout
-# ---------------------------------------------------------------------------
-
-
 @router.post("/auth/logout", status_code=204)
-def logout(token: str = Depends(require_auth)):
+def logout(token: str = Depends(get_raw_token)):
     auth_logout(token)
 
 
-# ---------------------------------------------------------------------------
-# GET /api/board
-# ---------------------------------------------------------------------------
-
-
-@router.get("/board", response_model=BoardOut)
-def get_board(token: str = Depends(require_auth)):
-    return _fetch_board()
+@router.post("/auth/register", status_code=201)
+def register(body: RegisterIn):
+    user_id = auth_register(body.username, body.password)
+    if not user_id:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    return {"user_id": user_id}
 
 
 # ---------------------------------------------------------------------------
-# PATCH /api/board/columns/{column_id} - rename column
+# Health
 # ---------------------------------------------------------------------------
 
 
-@router.patch("/board/columns/{column_id}", response_model=ColumnOut)
-def rename_column(column_id: str, body: RenameColumnIn, token: str = Depends(require_auth)):
+@router.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Boards
+# ---------------------------------------------------------------------------
+
+
+@router.get("/boards", response_model=list[BoardSummary])
+def list_boards(user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name, created_at, updated_at FROM boards "
+            "WHERE user_id = ? ORDER BY created_at",
+            (user_id,),
+        ).fetchall()
+        return [BoardSummary(**dict(r)) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.post("/boards", response_model=BoardSummary, status_code=201)
+def create_board(body: CreateBoardIn, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        now = _now()
+        board_id = f"board-{uuid.uuid4().hex}"
+        with conn:
+            conn.execute(
+                "INSERT INTO boards (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (board_id, user_id, body.name.strip(), now, now),
+            )
+        row = conn.execute(
+            "SELECT id, name, created_at, updated_at FROM boards WHERE id = ?",
+            (board_id,),
+        ).fetchone()
+        return BoardSummary(**dict(row))
+    finally:
+        conn.close()
+
+
+@router.get("/boards/{board_id}", response_model=BoardOut)
+def get_board(board_id: str, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+    finally:
+        conn.close()
+    return _fetch_board_data(board_id)
+
+
+@router.patch("/boards/{board_id}", response_model=BoardSummary)
+def rename_board(board_id: str, body: RenameBoardIn, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+        now = _now()
+        with conn:
+            conn.execute(
+                "UPDATE boards SET name = ?, updated_at = ? WHERE id = ?",
+                (body.name.strip(), now, board_id),
+            )
+        row = conn.execute(
+            "SELECT id, name, created_at, updated_at FROM boards WHERE id = ?",
+            (board_id,),
+        ).fetchone()
+        return BoardSummary(**dict(row))
+    finally:
+        conn.close()
+
+
+@router.delete("/boards/{board_id}", status_code=204)
+def delete_board(board_id: str, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+        with conn:
+            # Manually cascade: delete cards → columns → board
+            col_ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM columns WHERE board_id = ?", (board_id,)
+                ).fetchall()
+            ]
+            for col_id in col_ids:
+                conn.execute("DELETE FROM cards WHERE column_id = ?", (col_id,))
+            conn.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
+            conn.execute("DELETE FROM boards WHERE id = ?", (board_id,))
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Columns
+# ---------------------------------------------------------------------------
+
+
+@router.post("/boards/{board_id}/columns", response_model=ColumnOut, status_code=201)
+def create_column(board_id: str, body: CreateColumnIn, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+        now = _now()
+        col_id = f"col-{uuid.uuid4().hex}"
+        with conn:
+            max_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM columns WHERE board_id = ?",
+                (board_id,),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO columns (id, board_id, title, position, created_at) VALUES (?, ?, ?, ?, ?)",
+                (col_id, board_id, body.title.strip(), max_pos + 1, now),
+            )
+        col = conn.execute(
+            "SELECT id, board_id, title, position, created_at FROM columns WHERE id = ?",
+            (col_id,),
+        ).fetchone()
+        return ColumnOut(**dict(col), cards=[])
+    finally:
+        conn.close()
+
+
+# NOTE: /reorder must be registered before /{column_id} so FastAPI matches it first.
+@router.patch("/boards/{board_id}/columns/reorder", status_code=204)
+def reorder_columns(board_id: str, body: ReorderColumnsIn, user_id: str = Depends(require_auth)):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+        existing_ids = {
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM columns WHERE board_id = ?", (board_id,)
+            ).fetchall()
+        }
+        for col_id in body.column_ids:
+            if col_id not in existing_ids:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown column: {col_id}"
+                )
+        with conn:
+            for pos, col_id in enumerate(body.column_ids):
+                conn.execute(
+                    "UPDATE columns SET position = ? WHERE id = ? AND board_id = ?",
+                    (pos, col_id, board_id),
+                )
+    finally:
+        conn.close()
+
+
+@router.patch("/boards/{board_id}/columns/{column_id}", response_model=ColumnOut)
+def rename_column(
+    board_id: str,
+    column_id: str,
+    body: RenameColumnIn,
+    user_id: str = Depends(require_auth),
+):
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="Title cannot be empty")
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
+        _get_board(conn, user_id, board_id)
         row = conn.execute(
             "SELECT id FROM columns WHERE id = ? AND board_id = ?",
             (column_id, board_id),
@@ -142,7 +329,9 @@ def rename_column(column_id: str, body: RenameColumnIn, token: str = Depends(req
             (column_id,),
         ).fetchone()
         card_rows = conn.execute(
-            "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE column_id = ? ORDER BY position",
+            "SELECT id, column_id, title, details, position, "
+            "due_date, priority, color_label, created_at, updated_at "
+            "FROM cards WHERE column_id = ? ORDER BY position",
             (column_id,),
         ).fetchall()
         return ColumnOut(**dict(col), cards=[CardOut(**dict(c)) for c in card_rows])
@@ -150,18 +339,58 @@ def rename_column(column_id: str, body: RenameColumnIn, token: str = Depends(req
         conn.close()
 
 
+@router.delete("/boards/{board_id}/columns/{column_id}", status_code=204)
+def delete_column(
+    board_id: str,
+    column_id: str,
+    user_id: str = Depends(require_auth),
+):
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, board_id)
+        row = conn.execute(
+            "SELECT id FROM columns WHERE id = ? AND board_id = ?",
+            (column_id, board_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Column not found")
+        with conn:
+            conn.execute("DELETE FROM cards WHERE column_id = ?", (column_id,))
+            conn.execute("DELETE FROM columns WHERE id = ?", (column_id,))
+            # Compact positions
+            remaining = conn.execute(
+                "SELECT id FROM columns WHERE board_id = ? ORDER BY position",
+                (board_id,),
+            ).fetchall()
+            for pos, r in enumerate(remaining):
+                conn.execute(
+                    "UPDATE columns SET position = ? WHERE id = ?", (pos, r["id"])
+                )
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
-# POST /api/board/columns/{column_id}/cards - create card
+# Cards
 # ---------------------------------------------------------------------------
 
 
-@router.post("/board/columns/{column_id}/cards", response_model=CardOut, status_code=201)
-def create_card(column_id: str, body: CreateCardIn, token: str = Depends(require_auth)):
+@router.post(
+    "/boards/{board_id}/columns/{column_id}/cards",
+    response_model=CardOut,
+    status_code=201,
+)
+def create_card(
+    board_id: str,
+    column_id: str,
+    body: CreateCardIn,
+    user_id: str = Depends(require_auth),
+):
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="Title cannot be empty")
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
+        _get_board(conn, user_id, board_id)
         col_row = conn.execute(
             "SELECT id FROM columns WHERE id = ? AND board_id = ?",
             (column_id, board_id),
@@ -172,26 +401,32 @@ def create_card(column_id: str, body: CreateCardIn, token: str = Depends(require
         now = _now()
         card_id = f"card-{uuid.uuid4().hex}"
 
-        # Lock writes while reading the current max position so concurrent
-        # card creation cannot assign the same slot twice.
-        conn.isolation_level = None  # manual transaction control
+        conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         try:
             max_pos = conn.execute(
                 "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ?",
                 (column_id,),
             ).fetchone()[0]
-            position = max_pos + 1
             conn.execute(
-                "INSERT INTO cards (id, column_id, title, details, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (card_id, column_id, body.title.strip(), body.details, position, now, now),
+                "INSERT INTO cards (id, column_id, title, details, position, "
+                "due_date, priority, color_label, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    card_id, column_id, body.title.strip(), body.details,
+                    max_pos + 1, body.due_date, body.priority, body.color_label,
+                    now, now,
+                ),
             )
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
             raise
+
         row = conn.execute(
-            "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE id = ?",
+            "SELECT id, column_id, title, details, position, "
+            "due_date, priority, color_label, created_at, updated_at "
+            "FROM cards WHERE id = ?",
             (card_id,),
         ).fetchone()
         return CardOut(**dict(row))
@@ -199,43 +434,48 @@ def create_card(column_id: str, body: CreateCardIn, token: str = Depends(require
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-# PATCH /api/board/cards/{card_id} - update card title/details
-# ---------------------------------------------------------------------------
-
-
-@router.patch("/board/cards/{card_id}", response_model=CardOut)
-def update_card(card_id: str, body: UpdateCardIn, token: str = Depends(require_auth)):
+@router.patch("/boards/{board_id}/cards/{card_id}", response_model=CardOut)
+def update_card(
+    board_id: str,
+    card_id: str,
+    body: UpdateCardIn,
+    user_id: str = Depends(require_auth),
+):
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
+        _get_board(conn, user_id, board_id)
         row = conn.execute(
-            """
-            SELECT c.id FROM cards c
-            JOIN columns col ON col.id = c.column_id
-            WHERE c.id = ? AND col.board_id = ?
-            """,
+            "SELECT c.id FROM cards c "
+            "JOIN columns col ON col.id = c.column_id "
+            "WHERE c.id = ? AND col.board_id = ?",
             (card_id, board_id),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Card not found")
 
         existing = conn.execute(
-            "SELECT title, details FROM cards WHERE id = ?", (card_id,)
+            "SELECT title, details, due_date, priority, color_label FROM cards WHERE id = ?",
+            (card_id,),
         ).fetchone()
         new_title = body.title.strip() if body.title is not None else existing["title"]
         if body.title is not None and not new_title:
             raise HTTPException(status_code=422, detail="Title cannot be empty")
         new_details = body.details if body.details is not None else existing["details"]
+        new_due_date = body.due_date if body.due_date is not None else existing["due_date"]
+        new_priority = body.priority if body.priority is not None else existing["priority"]
+        new_color_label = body.color_label if body.color_label is not None else existing["color_label"]
         now = _now()
 
         with conn:
             conn.execute(
-                "UPDATE cards SET title = ?, details = ?, updated_at = ? WHERE id = ?",
-                (new_title, new_details, now, card_id),
+                "UPDATE cards SET title = ?, details = ?, due_date = ?, "
+                "priority = ?, color_label = ?, updated_at = ? WHERE id = ?",
+                (new_title, new_details, new_due_date, new_priority, new_color_label, now, card_id),
             )
         updated = conn.execute(
-            "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE id = ?",
+            "SELECT id, column_id, title, details, position, "
+            "due_date, priority, color_label, created_at, updated_at "
+            "FROM cards WHERE id = ?",
             (card_id,),
         ).fetchone()
         return CardOut(**dict(updated))
@@ -243,22 +483,15 @@ def update_card(card_id: str, body: UpdateCardIn, token: str = Depends(require_a
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-# DELETE /api/board/cards/{card_id}
-# ---------------------------------------------------------------------------
-
-
-@router.delete("/board/cards/{card_id}", status_code=204)
-def delete_card(card_id: str, token: str = Depends(require_auth)):
+@router.delete("/boards/{board_id}/cards/{card_id}", status_code=204)
+def delete_card(board_id: str, card_id: str, user_id: str = Depends(require_auth)):
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
+        _get_board(conn, user_id, board_id)
         row = conn.execute(
-            """
-            SELECT c.id, c.column_id, c.position FROM cards c
-            JOIN columns col ON col.id = c.column_id
-            WHERE c.id = ? AND col.board_id = ?
-            """,
+            "SELECT c.id, c.column_id, c.position FROM cards c "
+            "JOIN columns col ON col.id = c.column_id "
+            "WHERE c.id = ? AND col.board_id = ?",
             (card_id, board_id),
         ).fetchone()
         if not row:
@@ -269,30 +502,29 @@ def delete_card(card_id: str, token: str = Depends(require_auth)):
         with conn:
             conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
             conn.execute(
-                "UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?",
+                "UPDATE cards SET position = position - 1 "
+                "WHERE column_id = ? AND position > ?",
                 (col_id, deleted_pos),
             )
     finally:
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-# PATCH /api/board/cards/{card_id}/move
-# ---------------------------------------------------------------------------
-
-
-@router.patch("/board/cards/{card_id}/move", response_model=CardOut)
-def move_card(card_id: str, body: MoveCardIn, token: str = Depends(require_auth)):
+@router.patch("/boards/{board_id}/cards/{card_id}/move", response_model=CardOut)
+def move_card(
+    board_id: str,
+    card_id: str,
+    body: MoveCardIn,
+    user_id: str = Depends(require_auth),
+):
     conn = get_db()
     try:
-        board_id = _get_board_id(conn)
+        _get_board(conn, user_id, board_id)
 
         card_row = conn.execute(
-            """
-            SELECT c.id, c.column_id, c.position FROM cards c
-            JOIN columns col ON col.id = c.column_id
-            WHERE c.id = ? AND col.board_id = ?
-            """,
+            "SELECT c.id, c.column_id, c.position FROM cards c "
+            "JOIN columns col ON col.id = c.column_id "
+            "WHERE c.id = ? AND col.board_id = ?",
             (card_id, board_id),
         ).fetchone()
         if not card_row:
@@ -313,37 +545,35 @@ def move_card(card_id: str, body: MoveCardIn, token: str = Depends(require_auth)
         dst_count = conn.execute(
             "SELECT COUNT(*) FROM cards WHERE column_id = ?", (dst_col_id,)
         ).fetchone()[0]
-        if src_col_id == dst_col_id:
-            max_dst_pos = dst_count - 1
-        else:
-            max_dst_pos = dst_count
+        max_dst_pos = dst_count - 1 if src_col_id == dst_col_id else dst_count
         dst_pos = max(0, min(dst_pos, max_dst_pos))
 
         now = _now()
-
-        # Use BEGIN IMMEDIATE to prevent concurrent moves from producing
-        # inconsistent position values.
-        conn.isolation_level = None  # manual transaction control
+        conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         try:
             if src_col_id == dst_col_id:
                 if src_pos < dst_pos:
                     conn.execute(
-                        "UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ? AND position <= ?",
+                        "UPDATE cards SET position = position - 1 "
+                        "WHERE column_id = ? AND position > ? AND position <= ?",
                         (src_col_id, src_pos, dst_pos),
                     )
                 elif src_pos > dst_pos:
                     conn.execute(
-                        "UPDATE cards SET position = position + 1 WHERE column_id = ? AND position >= ? AND position < ?",
+                        "UPDATE cards SET position = position + 1 "
+                        "WHERE column_id = ? AND position >= ? AND position < ?",
                         (src_col_id, dst_pos, src_pos),
                     )
             else:
                 conn.execute(
-                    "UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?",
+                    "UPDATE cards SET position = position - 1 "
+                    "WHERE column_id = ? AND position > ?",
                     (src_col_id, src_pos),
                 )
                 conn.execute(
-                    "UPDATE cards SET position = position + 1 WHERE column_id = ? AND position >= ?",
+                    "UPDATE cards SET position = position + 1 "
+                    "WHERE column_id = ? AND position >= ?",
                     (dst_col_id, dst_pos),
                 )
 
@@ -357,7 +587,9 @@ def move_card(card_id: str, body: MoveCardIn, token: str = Depends(require_auth)
             raise
 
         updated = conn.execute(
-            "SELECT id, column_id, title, details, position, created_at, updated_at FROM cards WHERE id = ?",
+            "SELECT id, column_id, title, details, position, "
+            "due_date, priority, color_label, created_at, updated_at "
+            "FROM cards WHERE id = ?",
             (card_id,),
         ).fetchone()
         return CardOut(**dict(updated))
@@ -366,12 +598,12 @@ def move_card(card_id: str, body: MoveCardIn, token: str = Depends(require_auth)
 
 
 # ---------------------------------------------------------------------------
-# POST /api/ai/chat - send messages to AI and get a reply
+# AI chat
 # ---------------------------------------------------------------------------
 
 
 @router.post("/ai/chat", response_model=ChatOut)
-def ai_chat(body: ChatIn, token: str = Depends(require_auth)):
+def ai_chat(body: ChatIn, user_id: str = Depends(require_auth)):
     global _ai_last_call
     now = time.time()
     if now - _ai_last_call < _AI_RATE_LIMIT_SECONDS:
@@ -381,9 +613,16 @@ def ai_chat(body: ChatIn, token: str = Depends(require_auth)):
         )
     _ai_last_call = now
 
+    # Validate that the board belongs to this user
+    conn = get_db()
+    try:
+        _get_board(conn, user_id, body.board_id)
+    finally:
+        conn.close()
+
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     try:
-        board_out = _fetch_board()
+        board_out = _fetch_board_data(body.board_id)
         board_json = board_out.model_dump()
         ai_result = ai_module.chat(board=board_json, messages=messages)
     except RuntimeError as exc:
@@ -391,7 +630,6 @@ def ai_chat(body: ChatIn, token: str = Depends(require_auth)):
 
     validated = ChatOut.model_validate(ai_result)
 
-    # Validate that any IDs the AI references actually exist on the board.
     if validated.kanban_update:
         valid_col_ids = {col.id for col in board_out.columns}
         valid_card_ids = {card.id for col in board_out.columns for card in col.cards}

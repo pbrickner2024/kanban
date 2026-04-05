@@ -1,7 +1,30 @@
+export type Priority = "low" | "medium" | "high" | "urgent";
+
+export const LABEL_COLORS: { id: string; hex: string; label: string }[] = [
+  { id: "red", hex: "#e74c3c", label: "Red" },
+  { id: "orange", hex: "#e67e22", label: "Orange" },
+  { id: "yellow", hex: "#f1c40f", label: "Yellow" },
+  { id: "green", hex: "#2ecc71", label: "Green" },
+  { id: "blue", hex: "#3498db", label: "Blue" },
+  { id: "purple", hex: "#9b59b6", label: "Purple" },
+  { id: "pink", hex: "#e91e8c", label: "Pink" },
+  { id: "teal", hex: "#1abc9c", label: "Teal" },
+];
+
+export const PRIORITY_META: Record<Priority, { label: string; color: string }> = {
+  low: { label: "Low", color: "#2ecc71" },
+  medium: { label: "Medium", color: "#f39c12" },
+  high: { label: "High", color: "#e67e22" },
+  urgent: { label: "Urgent", color: "#e74c3c" },
+};
+
 export type Card = {
   id: string;
   title: string;
-  details: string;
+  details: string | null;
+  due_date: string | null;
+  priority: Priority | null;
+  color_label: string | null;
 };
 
 export type Column = {
@@ -13,62 +36,6 @@ export type Column = {
 export type BoardData = {
   columns: Column[];
   cards: Record<string, Card>;
-};
-
-export const initialData: BoardData = {
-  columns: [
-    { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
-    { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },
-    {
-      id: "col-progress",
-      title: "In Progress",
-      cardIds: ["card-4", "card-5"],
-    },
-    { id: "col-review", title: "Review", cardIds: ["card-6"] },
-    { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
-  ],
-  cards: {
-    "card-1": {
-      id: "card-1",
-      title: "Align roadmap themes",
-      details: "Draft quarterly themes with impact statements and metrics.",
-    },
-    "card-2": {
-      id: "card-2",
-      title: "Gather customer signals",
-      details: "Review support tags, sales notes, and churn feedback.",
-    },
-    "card-3": {
-      id: "card-3",
-      title: "Prototype analytics view",
-      details: "Sketch initial dashboard layout and key drill-downs.",
-    },
-    "card-4": {
-      id: "card-4",
-      title: "Refine status language",
-      details: "Standardize column labels and tone across the board.",
-    },
-    "card-5": {
-      id: "card-5",
-      title: "Design card layout",
-      details: "Add hierarchy and spacing for scanning dense lists.",
-    },
-    "card-6": {
-      id: "card-6",
-      title: "QA micro-interactions",
-      details: "Verify hover, focus, and loading states.",
-    },
-    "card-7": {
-      id: "card-7",
-      title: "Ship marketing page",
-      details: "Final copy approved and asset pack delivered.",
-    },
-    "card-8": {
-      id: "card-8",
-      title: "Close onboarding sprint",
-      details: "Document release notes and share internally.",
-    },
-  },
 };
 
 const isColumnId = (columns: Column[], id: string) =>
@@ -167,7 +134,15 @@ export const createId = (prefix: string) => {
   return `${prefix}-${randomPart}${timePart}`;
 };
 
-type ApiCard = { id: string; column_id: string; title: string; details: string };
+type ApiCard = {
+  id: string;
+  column_id: string;
+  title: string;
+  details: string | null;
+  due_date: string | null;
+  priority: Priority | null;
+  color_label: string | null;
+};
 type ApiColumn = { id: string; title: string; cards: ApiCard[] };
 type ApiBoard = { id: string; name: string; columns: ApiColumn[] };
 
@@ -175,7 +150,14 @@ export const boardFromApi = (api: ApiBoard): BoardData => {
   const cards: Record<string, Card> = {};
   const columns = api.columns.map((col) => {
     col.cards.forEach((c) => {
-      cards[c.id] = { id: c.id, title: c.title, details: c.details };
+      cards[c.id] = {
+        id: c.id,
+        title: c.title,
+        details: c.details,
+        due_date: c.due_date ?? null,
+        priority: c.priority ?? null,
+        color_label: c.color_label ?? null,
+      };
     });
     return { id: col.id, title: col.title, cardIds: col.cards.map((c) => c.id) };
   });

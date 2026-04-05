@@ -14,61 +14,110 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+const BOARD_ID = "board-1";
+
+const mockBoardList = [
+  { id: BOARD_ID, name: "My Kanban", created_at: "2026-01-01T00:00:00+00:00", updated_at: "2026-01-01T00:00:00+00:00" },
+];
+
 const mockBoard = {
-  id: "board-1",
+  id: BOARD_ID,
   name: "My Kanban",
   columns: [
     {
       id: "col-backlog",
       title: "Backlog",
       position: 0,
-      board_id: "board-1",
+      board_id: BOARD_ID,
       created_at: "2026-01-01T00:00:00+00:00",
       cards: [
-        { id: "card-1", column_id: "col-backlog", title: "Align roadmap themes", details: "Details 1", position: 0, created_at: "2026-01-01T00:00:00+00:00", updated_at: "2026-01-01T00:00:00+00:00" },
-        { id: "card-2", column_id: "col-backlog", title: "Gather customer signals", details: "Details 2", position: 1, created_at: "2026-01-01T00:00:00+00:00", updated_at: "2026-01-01T00:00:00+00:00" },
+        {
+          id: "card-1",
+          column_id: "col-backlog",
+          title: "Align roadmap themes",
+          details: "Details 1",
+          position: 0,
+          due_date: null,
+          priority: null,
+          color_label: null,
+          created_at: "2026-01-01T00:00:00+00:00",
+          updated_at: "2026-01-01T00:00:00+00:00",
+        },
+        {
+          id: "card-2",
+          column_id: "col-backlog",
+          title: "Gather customer signals",
+          details: "Details 2",
+          position: 1,
+          due_date: null,
+          priority: null,
+          color_label: null,
+          created_at: "2026-01-01T00:00:00+00:00",
+          updated_at: "2026-01-01T00:00:00+00:00",
+        },
       ],
     },
-    { id: "col-discovery", title: "Discovery", position: 1, board_id: "board-1", created_at: "2026-01-01T00:00:00+00:00", cards: [] },
-    { id: "col-progress", title: "In Progress", position: 2, board_id: "board-1", created_at: "2026-01-01T00:00:00+00:00", cards: [] },
-    { id: "col-review", title: "Review", position: 3, board_id: "board-1", created_at: "2026-01-01T00:00:00+00:00", cards: [] },
-    { id: "col-done", title: "Done", position: 4, board_id: "board-1", created_at: "2026-01-01T00:00:00+00:00", cards: [] },
+    { id: "col-discovery", title: "Discovery", position: 1, board_id: BOARD_ID, created_at: "2026-01-01T00:00:00+00:00", cards: [] },
+    { id: "col-progress", title: "In Progress", position: 2, board_id: BOARD_ID, created_at: "2026-01-01T00:00:00+00:00", cards: [] },
+    { id: "col-review", title: "Review", position: 3, board_id: BOARD_ID, created_at: "2026-01-01T00:00:00+00:00", cards: [] },
+    { id: "col-done", title: "Done", position: 4, board_id: BOARD_ID, created_at: "2026-01-01T00:00:00+00:00", cards: [] },
   ],
 };
 
+function makeFetchMock(overrides?: (url: string, opts?: RequestInit) => Response | null) {
+  return vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+    const method = opts?.method ?? "GET";
+
+    // Allow test-specific overrides
+    if (overrides) {
+      const result = overrides(url, opts);
+      if (result !== null) return Promise.resolve(result);
+    }
+
+    if (url.includes("/api/ai/chat") && method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            reply: "Done. I renamed the column.",
+            kanban_update: {
+              operations: [
+                { action: "rename_column", column_id: "col-backlog", title: "Ideas" },
+              ],
+            },
+          }),
+      });
+    }
+    // Board list
+    if (url === "/api/boards" && method === "GET") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockBoardList) });
+    }
+    // Full board
+    if (url.includes(`/api/boards/${BOARD_ID}`) && method === "GET") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockBoard) });
+    }
+    // Card creation
+    if (method === "POST" && url.includes("/cards")) {
+      const body = JSON.parse(opts!.body as string);
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: "card-new",
+            title: body.title,
+            details: body.details,
+            due_date: null,
+            priority: null,
+            color_label: null,
+          }),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
+}
+
 beforeEach(() => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
-      const method = opts?.method ?? "GET";
-      if (url.includes("/api/ai/chat") && method === "POST") {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              reply: "Done. I renamed the column.",
-              kanban_update: {
-                operations: [
-                  { action: "rename_column", column_id: "col-backlog", title: "Ideas" },
-                ],
-              },
-            }),
-        });
-      }
-      if (method === "GET") {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockBoard) });
-      }
-      if (method === "POST" && url.includes("/cards")) {
-        const body = JSON.parse(opts!.body as string);
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({ id: "card-new", title: body.title, details: body.details }),
-        });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    })
-  );
+  vi.stubGlobal("fetch", makeFetchMock());
 });
 
 afterEach(() => {
@@ -88,12 +137,15 @@ describe("KanbanBoard", () => {
     expect(await screen.findAllByTestId(/column-/i)).toHaveLength(5);
   });
 
-  it("shows loading state before board arrives", () => {
+  it("shows loading state before board arrives", async () => {
     const pendingBoard = createDeferred<Response>();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
         const method = opts?.method ?? "GET";
+        if (url === "/api/boards" && method === "GET") {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockBoardList) });
+        }
         if (method === "GET") {
           return pendingBoard.promise;
         }
@@ -102,7 +154,10 @@ describe("KanbanBoard", () => {
     );
 
     renderBoard();
-    expect(screen.getByText(/loading board/i)).toBeInTheDocument();
+    // Boards list loads first, then board data is pending → "Loading board..."
+    await waitFor(() => {
+      expect(screen.getByText(/loading board/i)).toBeInTheDocument();
+    });
   });
 
   it("renames a column via local input state", async () => {
@@ -120,10 +175,16 @@ describe("KanbanBoard", () => {
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "Renamed");
-    await userEvent.tab(); // triggers blur
+    await userEvent.tab();
     await waitFor(() => {
       const calls = (vi.mocked(fetch) as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.some(([url, opts]) => url.includes("col-backlog") && opts?.method === "PATCH")).toBe(true);
+      expect(
+        calls.some(
+          ([url, opts]) =>
+            String(url).includes(`boards/${BOARD_ID}/columns/col-backlog`) &&
+            (opts as RequestInit)?.method === "PATCH"
+        )
+      ).toBe(true);
     });
   });
 
@@ -219,7 +280,7 @@ describe("KanbanBoard", () => {
       expect(
         calls.some(
           ([url, opts]) =>
-            String(url).includes("/api/board/columns/col-backlog") &&
+            String(url).includes(`boards/${BOARD_ID}/columns/col-backlog`) &&
             (opts as RequestInit | undefined)?.method === "PATCH"
         )
       ).toBe(true);
@@ -255,13 +316,16 @@ describe("KanbanBoard", () => {
               }),
           });
         }
-        if (method === "PATCH" && url.includes("/api/board/columns/col-backlog")) {
+        if (method === "PATCH" && String(url).includes(`boards/${BOARD_ID}/columns/col-backlog`)) {
           return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         }
-        if (method === "PATCH" && url.includes("/api/board/cards/card-missing/move")) {
+        if (method === "PATCH" && String(url).includes("cards/card-missing/move")) {
           return Promise.resolve({ ok: false, status: 404 });
         }
-        if (method === "GET") {
+        if (url === "/api/boards" && method === "GET") {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockBoardList) });
+        }
+        if (method === "GET" && String(url).includes(`/api/boards/${BOARD_ID}`)) {
           boardFetches += 1;
           const board = boardFetches > 1 ? updatedBoard : mockBoard;
           return Promise.resolve({ ok: true, json: () => Promise.resolve(board) });

@@ -91,8 +91,6 @@ export async function logoutApi(): Promise<void> {
   }).catch(() => {});
 }
 
-// Boards
-
 export async function fetchBoards(): Promise<BoardSummary[]> {
   const res = await apiFetch("/boards");
   return res.json();
@@ -123,8 +121,6 @@ export async function fetchBoard(boardId: string): Promise<BoardData> {
   return boardFromApi(await res.json());
 }
 
-// Columns
-
 export async function createColumn(boardId: string, title: string): Promise<{ id: string; title: string; position: number }> {
   const res = await apiFetch(`/boards/${boardId}/columns`, {
     method: "POST",
@@ -150,8 +146,6 @@ export async function reorderColumns(boardId: string, columnIds: string[]): Prom
     body: JSON.stringify({ column_ids: columnIds }),
   });
 }
-
-// Cards
 
 export async function createCard(
   boardId: string,

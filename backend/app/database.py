@@ -1,12 +1,3 @@
-"""
-Database initialisation and connection helper.
-
-On first call to get_db(), the database file is created and tables are
-initialised.  The hardcoded MVP user, board and default columns are seeded
-if they do not already exist.  _apply_migrations() handles additive schema
-changes for existing databases.
-"""
-
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -21,7 +12,6 @@ def _now() -> str:
 
 
 def get_db() -> sqlite3.Connection:
-    """Return a SQLite connection with row_factory and FK support."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -35,7 +25,6 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
-    """Add new columns to existing tables without losing data."""
     import bcrypt
 
     # users: password_hash
@@ -57,7 +46,6 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_boards_remove_unique(conn: sqlite3.Connection) -> None:
-    """Recreate the boards table without the UNIQUE constraint on user_id."""
     indexes = conn.execute("PRAGMA index_list(boards)").fetchall()
     for idx in indexes:
         if idx["unique"] == 1:
@@ -88,7 +76,6 @@ def _migrate_boards_remove_unique(conn: sqlite3.Connection) -> None:
 
 
 def init_db() -> None:
-    """Create tables and seed initial data if not already present."""
     conn = get_db()
     with conn:
         conn.executescript("""
@@ -141,7 +128,6 @@ def init_db() -> None:
 
 
 def _seed(conn: sqlite3.Connection) -> None:
-    """Insert the hardcoded MVP user, board, and default columns/cards if absent."""
     import bcrypt
 
     now = _now()

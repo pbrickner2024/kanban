@@ -1,5 +1,3 @@
-"""Pydantic models for request/response shapes."""
-
 from typing import Literal
 
 from pydantic import BaseModel, Field

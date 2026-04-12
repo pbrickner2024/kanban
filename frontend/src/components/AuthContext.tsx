@@ -62,7 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       await registerApi(username, password);
-      // Auto-login after successful registration
       const token = await loginApi(username, password);
       setAuthToken(token);
       return { success: true };

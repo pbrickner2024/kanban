@@ -56,7 +56,6 @@ def _extract_json(text: str) -> dict:
 
 
 def chat(board: dict, messages: list[dict]) -> dict:
-    """Send board + conversation and return structured AI output."""
     client = get_client()
     payload = {
         "board": board,

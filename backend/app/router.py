@@ -1,31 +1,3 @@
-"""
-Kanban board API routes.
-
-URL structure:
-  POST   /api/auth/login
-  POST   /api/auth/logout
-  POST   /api/auth/register
-
-  GET    /api/boards                                      list boards
-  POST   /api/boards                                      create board
-  GET    /api/boards/{board_id}                           get full board
-  PATCH  /api/boards/{board_id}                           rename board
-  DELETE /api/boards/{board_id}                           delete board
-
-  POST   /api/boards/{board_id}/columns                   create column
-  PATCH  /api/boards/{board_id}/columns/reorder           reorder all columns
-  PATCH  /api/boards/{board_id}/columns/{column_id}       rename column
-  DELETE /api/boards/{board_id}/columns/{column_id}       delete column
-
-  POST   /api/boards/{board_id}/columns/{col_id}/cards    create card
-  PATCH  /api/boards/{board_id}/cards/{card_id}           update card
-  DELETE /api/boards/{board_id}/cards/{card_id}           delete card
-  PATCH  /api/boards/{board_id}/cards/{card_id}/move      move card
-
-  POST   /api/ai/chat
-  GET    /api/health
-"""
-
 import time
 import uuid
 from datetime import datetime, timezone
@@ -72,7 +44,6 @@ def _now() -> str:
 
 
 def _get_board(conn, user_id: str, board_id: str):
-    """Validate board ownership and return the board row, or raise 404."""
     row = conn.execute(
         "SELECT id, name, created_at, updated_at FROM boards WHERE id = ? AND user_id = ?",
         (board_id, user_id),
@@ -82,9 +53,10 @@ def _get_board(conn, user_id: str, board_id: str):
     return row
 
 
-def _fetch_board_data(board_id: str) -> BoardOut:
-    """Fetch full board with columns and cards."""
-    conn = get_db()
+def _fetch_board_data(board_id: str, conn=None) -> BoardOut:
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_db()
     try:
         board_row = conn.execute(
             "SELECT id, name FROM boards WHERE id = ?", (board_id,)
@@ -115,12 +87,8 @@ def _fetch_board_data(board_id: str) -> BoardOut:
 
         return BoardOut(id=board_row["id"], name=board_row["name"], columns=columns)
     finally:
-        conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
+        if owns_conn:
+            conn.close()
 
 
 @router.post("/auth/login", response_model=LoginOut)
@@ -142,21 +110,6 @@ def register(body: RegisterIn):
     if not user_id:
         raise HTTPException(status_code=409, detail="Username already taken")
     return {"user_id": user_id}
-
-
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
-
-
-@router.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-# ---------------------------------------------------------------------------
-# Boards
-# ---------------------------------------------------------------------------
 
 
 @router.get("/boards", response_model=list[BoardSummary])
@@ -198,9 +151,9 @@ def get_board(board_id: str, user_id: str = Depends(require_auth)):
     conn = get_db()
     try:
         _get_board(conn, user_id, board_id)
+        return _fetch_board_data(board_id, conn)
     finally:
         conn.close()
-    return _fetch_board_data(board_id)
 
 
 @router.patch("/boards/{board_id}", response_model=BoardSummary)
@@ -229,7 +182,6 @@ def delete_board(board_id: str, user_id: str = Depends(require_auth)):
     try:
         _get_board(conn, user_id, board_id)
         with conn:
-            # Manually cascade: delete cards → columns → board
             col_ids = [
                 r["id"]
                 for r in conn.execute(
@@ -242,11 +194,6 @@ def delete_board(board_id: str, user_id: str = Depends(require_auth)):
             conn.execute("DELETE FROM boards WHERE id = ?", (board_id,))
     finally:
         conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Columns
-# ---------------------------------------------------------------------------
 
 
 @router.post("/boards/{board_id}/columns", response_model=ColumnOut, status_code=201)
@@ -274,7 +221,6 @@ def create_column(board_id: str, body: CreateColumnIn, user_id: str = Depends(re
         conn.close()
 
 
-# NOTE: /reorder must be registered before /{column_id} so FastAPI matches it first.
 @router.patch("/boards/{board_id}/columns/reorder", status_code=204)
 def reorder_columns(board_id: str, body: ReorderColumnsIn, user_id: str = Depends(require_auth)):
     conn = get_db()
@@ -357,7 +303,6 @@ def delete_column(
         with conn:
             conn.execute("DELETE FROM cards WHERE column_id = ?", (column_id,))
             conn.execute("DELETE FROM columns WHERE id = ?", (column_id,))
-            # Compact positions
             remaining = conn.execute(
                 "SELECT id FROM columns WHERE board_id = ? ORDER BY position",
                 (board_id,),
@@ -368,11 +313,6 @@ def delete_column(
                 )
     finally:
         conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Cards
-# ---------------------------------------------------------------------------
 
 
 @router.post(
@@ -401,9 +341,7 @@ def create_card(
         now = _now()
         card_id = f"card-{uuid.uuid4().hex}"
 
-        conn.isolation_level = None
-        conn.execute("BEGIN IMMEDIATE")
-        try:
+        with conn:
             max_pos = conn.execute(
                 "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ?",
                 (column_id,),
@@ -418,10 +356,6 @@ def create_card(
                     now, now,
                 ),
             )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
 
         row = conn.execute(
             "SELECT id, column_id, title, details, position, "
@@ -457,20 +391,22 @@ def update_card(
             "SELECT title, details, due_date, priority, color_label FROM cards WHERE id = ?",
             (card_id,),
         ).fetchone()
-        new_title = body.title.strip() if body.title is not None else existing["title"]
-        if body.title is not None and not new_title:
+
+        fields = {k: existing[k] for k in ("title", "details", "due_date", "priority", "color_label")}
+        for key in fields:
+            val = getattr(body, key)
+            if val is not None:
+                fields[key] = val.strip() if key == "title" else val
+        if body.title is not None and not fields["title"]:
             raise HTTPException(status_code=422, detail="Title cannot be empty")
-        new_details = body.details if body.details is not None else existing["details"]
-        new_due_date = body.due_date if body.due_date is not None else existing["due_date"]
-        new_priority = body.priority if body.priority is not None else existing["priority"]
-        new_color_label = body.color_label if body.color_label is not None else existing["color_label"]
         now = _now()
 
         with conn:
             conn.execute(
                 "UPDATE cards SET title = ?, details = ?, due_date = ?, "
                 "priority = ?, color_label = ?, updated_at = ? WHERE id = ?",
-                (new_title, new_details, new_due_date, new_priority, new_color_label, now, card_id),
+                (fields["title"], fields["details"], fields["due_date"],
+                 fields["priority"], fields["color_label"], now, card_id),
             )
         updated = conn.execute(
             "SELECT id, column_id, title, details, position, "
@@ -597,11 +533,6 @@ def move_card(
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-# AI chat
-# ---------------------------------------------------------------------------
-
-
 @router.post("/ai/chat", response_model=ChatOut)
 def ai_chat(body: ChatIn, user_id: str = Depends(require_auth)):
     global _ai_last_call
@@ -613,7 +544,6 @@ def ai_chat(body: ChatIn, user_id: str = Depends(require_auth)):
         )
     _ai_last_call = now
 
-    # Validate that the board belongs to this user
     conn = get_db()
     try:
         _get_board(conn, user_id, body.board_id)

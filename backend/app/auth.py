@@ -1,12 +1,3 @@
-"""
-Server-side authentication.
-
-Passwords are hashed with bcrypt and stored in the users table.
-Login returns a cryptographically secure token stored in memory;
-every protected endpoint validates it via the require_auth dependency,
-which returns the authenticated user_id.
-"""
-
 import secrets
 from datetime import datetime, timezone
 from typing import Annotated
@@ -16,7 +7,6 @@ from fastapi import Header, HTTPException
 
 from app.database import get_db
 
-# token → user_id (in-memory; cleared on restart, acceptable for this scale)
 _tokens: dict[str, str] = {}
 
 
@@ -29,7 +19,6 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def login(username: str, password: str) -> str | None:
-    """Validate credentials and return a new token, or None if invalid."""
     conn = get_db()
     try:
         row = conn.execute(
@@ -51,7 +40,6 @@ def logout(token: str) -> None:
 
 
 def register(username: str, password: str) -> str | None:
-    """Create a new user. Returns user_id, or None if username already taken."""
     conn = get_db()
     try:
         existing = conn.execute(
@@ -74,7 +62,6 @@ def register(username: str, password: str) -> str | None:
 
 
 def require_auth(authorization: Annotated[str | None, Header()] = None) -> str:
-    """FastAPI dependency — validates the Bearer token and returns the user_id."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.removeprefix("Bearer ")
@@ -85,7 +72,6 @@ def require_auth(authorization: Annotated[str | None, Header()] = None) -> str:
 
 
 def get_raw_token(authorization: Annotated[str | None, Header()] = None) -> str:
-    """FastAPI dependency — returns the raw token string (used for logout)."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.removeprefix("Bearer ")

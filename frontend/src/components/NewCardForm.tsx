@@ -54,7 +54,6 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
             className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
           />
 
-          {/* Options toggle */}
           <button
             type="button"
             onClick={() =>
@@ -67,7 +66,6 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
 
           {formState.showOptions && (
             <div className="space-y-2 rounded-xl border border-[var(--stroke)] bg-[var(--surface)] p-3">
-              {/* Priority */}
               <div className="flex items-center gap-2">
                 <label className="w-14 text-xs font-semibold text-[var(--gray-text)]">
                   Priority
@@ -91,7 +89,6 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
                 </select>
               </div>
 
-              {/* Due date */}
               <div className="flex items-center gap-2">
                 <label className="w-14 text-xs font-semibold text-[var(--gray-text)]">Due</label>
                 <input
@@ -104,7 +101,6 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
                 />
               </div>
 
-              {/* Color label */}
               <div className="flex items-center gap-2">
                 <label className="w-14 text-xs font-semibold text-[var(--gray-text)]">Label</label>
                 <div className="flex gap-1.5">

@@ -33,8 +33,8 @@ export async function applyKanbanOperations(
 
     if (op.action === "update_card") {
       const fields: { title?: string; details?: string } = {};
-      if (op.title !== null && op.title !== undefined) fields.title = op.title;
-      if (op.details !== null && op.details !== undefined) fields.details = op.details;
+      if (op.title != null) fields.title = op.title;
+      if (op.details != null) fields.details = op.details;
       if (op.card_id && Object.keys(fields).length > 0) {
         await actions.updateCard(op.card_id, fields);
         applied += 1;

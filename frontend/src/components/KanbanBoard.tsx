@@ -8,6 +8,8 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -18,7 +20,6 @@ import { BoardSwitcher } from "@/components/BoardSwitcher";
 import { moveCard, type BoardData, type Priority } from "@/lib/kanban";
 import { useAuth } from "@/components/AuthContext";
 import * as api from "@/lib/api";
-import { ApiError } from "@/lib/api";
 import { applyKanbanOperations } from "@/lib/aiOps";
 
 export const KanbanBoard = () => {
@@ -39,7 +40,7 @@ export const KanbanBoard = () => {
 
   const handleAuthError = useCallback(
     (err: unknown) => {
-      if (err instanceof ApiError && err.status === 401) logout();
+      if (err instanceof api.ApiError && err.status === 401) logout();
     },
     [logout]
   );
@@ -101,6 +102,12 @@ export const KanbanBoard = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return closestCorners(args);
+  }, []);
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
 
@@ -364,7 +371,7 @@ export const KanbanBoard = () => {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >

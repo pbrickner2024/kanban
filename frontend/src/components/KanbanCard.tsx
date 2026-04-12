@@ -105,7 +105,6 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
             aria-label="Card details"
           />
 
-          {/* Priority */}
           <div className="flex items-center gap-2">
             <label className="w-16 text-xs font-semibold text-[var(--gray-text)]">Priority</label>
             <select
@@ -123,7 +122,6 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
             </select>
           </div>
 
-          {/* Due date */}
           <div className="flex items-center gap-2">
             <label className="w-16 text-xs font-semibold text-[var(--gray-text)]">Due</label>
             <input
@@ -134,7 +132,6 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
             />
           </div>
 
-          {/* Color label */}
           <div className="flex items-center gap-2">
             <label className="w-16 text-xs font-semibold text-[var(--gray-text)]">Label</label>
             <div className="flex gap-1.5">
